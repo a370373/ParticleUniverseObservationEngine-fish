@@ -1,3 +1,7 @@
+console.log(
+    "🔥🔥🔥 UNIVERSE.JS VERSION 20260809"
+);
+
 import {
     generateNebula
 } from "../particles/nebula-generator.js";
@@ -78,12 +82,6 @@ export class Universe {
         this.ready =
             false;
 
-        /*
-         * =================================================
-         * BACKGROUND
-         * =================================================
-         */
-
         try {
 
             console.log(
@@ -143,12 +141,6 @@ export class Universe {
         }
 
 
-        /*
-         * =================================================
-         * READY
-         * =================================================
-         */
-
         this.ready =
             true;
 
@@ -156,12 +148,6 @@ export class Universe {
             "[Universe] READY"
         );
 
-
-        /*
-         * =================================================
-         * FIRST NEBULA
-         * =================================================
-         */
 
         this.startNewCycle()
             .catch(
@@ -179,12 +165,6 @@ export class Universe {
             );
     }
 
-
-    /*
-     * =====================================================
-     * START NEW CYCLE
-     * =====================================================
-     */
 
     async startNewCycle() {
 
@@ -226,12 +206,6 @@ export class Universe {
             "SUMMONING"
         );
 
-
-        /*
-         * =================================================
-         * IMAGE
-         * =================================================
-         */
 
         console.log(
             "[Universe] GET RANDOM IMAGE"
@@ -282,12 +256,6 @@ export class Universe {
             "[Universe] IMAGE FOUND"
         );
 
-
-        /*
-         * =================================================
-         * GENERATE NEBULA
-         * =================================================
-         */
 
         console.log(
             "[Universe] GENERATING NEBULA"
@@ -355,20 +323,8 @@ export class Universe {
             nebula;
 
 
-        /*
-         * =================================================
-         * REMOVE OLD PARTICLES
-         * =================================================
-         */
-
         this.disposeParticleSystem();
 
-
-        /*
-         * =================================================
-         * CREATE PARTICLE SYSTEM
-         * =================================================
-         */
 
         console.log(
             "[Universe] CREATING PARTICLE SYSTEM"
@@ -425,12 +381,6 @@ export class Universe {
             "[Universe] PARTICLES ADDED"
         );
 
-
-        /*
-         * =================================================
-         * ORIENTATION
-         * =================================================
-         */
 
         if (
             nebula.observation
@@ -490,12 +440,6 @@ export class Universe {
         }
 
 
-        /*
-         * =================================================
-         * SUMMONING
-         * =================================================
-         */
-
         nebula.state =
             "SUMMONING";
 
@@ -551,12 +495,6 @@ export class Universe {
         );
     }
 
-
-    /*
-     * =====================================================
-     * UPDATE
-     * =====================================================
-     */
 
     update(
         time,
@@ -652,12 +590,6 @@ export class Universe {
     }
 
 
-    /*
-     * =====================================================
-     * SHUFFLE
-     * =====================================================
-     */
-
     async shuffle() {
 
         if (
@@ -718,12 +650,6 @@ export class Universe {
     }
 
 
-    /*
-     * =====================================================
-     * COMPLETE OBSERVATION
-     * =====================================================
-     */
-
     async completeObservation() {
 
         if (
@@ -762,12 +688,6 @@ export class Universe {
         }
     }
 
-
-    /*
-     * =====================================================
-     * DISPOSE
-     * =====================================================
-     */
 
     disposeParticleSystem() {
 
@@ -810,12 +730,6 @@ export class Universe {
             null;
     }
 
-
-    /*
-     * =====================================================
-     * ERROR
-     * =====================================================
-     */
 
     showError(
         error
