@@ -3,26 +3,29 @@
  * PARTICLE UNIVERSE
  * PARTICLE SHUFFLE
  *
- * Stable Particle Shuffle
+ * Stable Temporary Particle Shuffle
  *
- * Original Positions
- *        ↓
- * Temporary Expansion
- *        ↓
- * Randomized Displacement
- *        ↓
- * Return To Original Positions
- *        ↓
- * Stable
+ * Original Visible Positions
+ *          ↓
+ * Temporary Random Expansion
+ *          ↓
+ * Maximum Displacement
+ *          ↓
+ * Return To Original Visible Positions
+ *          ↓
+ * Exact Restoration
  *
  * IMPORTANT
  * ---------------------------------------------------------
- * This module does NOT permanently modify nebula.positions.
+ * This module NEVER modifies:
  *
- * It only modifies the live BufferGeometry position buffer
- * during the shuffle animation.
+ *     particleSystem.data.positions
  *
- * The original particle data remains untouched.
+ * It only modifies:
+ *
+ *     geometry.attributes.position.array
+ *
+ * The shuffle is therefore a temporary visual effect.
  * =========================================================
  */
 
@@ -104,7 +107,7 @@ export function shuffleParticles(
 
     if (
         !positions ||
-        positions.length === 0
+        positions.length < 3
     ) {
 
         return Promise.resolve();
@@ -123,12 +126,12 @@ export function shuffleParticles(
         );
 
 
-    const requestedCount =
+    const dataCount =
         Number.isFinite(
-            data.count
+            Number(data.count)
         )
             ? Math.floor(
-                data.count
+                Number(data.count)
             )
             : bufferCount;
 
@@ -137,7 +140,7 @@ export function shuffleParticles(
         Math.min(
             Math.max(
                 0,
-                requestedCount
+                dataCount
             ),
             bufferCount
         );
@@ -157,29 +160,33 @@ export function shuffleParticles(
      * =====================================================
      */
 
-    const safeDuration =
-        Math.max(
-            1,
-            Number.isFinite(
-                Number(
-                    duration
-                )
-            )
-                ? Number(
-                    duration
-                )
-                : 1200
+    const numericDuration =
+        Number(
+            duration
         );
+
+
+    const safeDuration =
+        Number.isFinite(
+            numericDuration
+        )
+            ? Math.max(
+                1,
+                numericDuration
+            )
+            : 1200;
 
 
     /*
      * =====================================================
-     * PREVENT DUPLICATE SHUFFLE
+     * EVENT SAFETY
      * =====================================================
      *
-     * If another shuffle is already active,
-     * do not start a second animation on the
-     * same position buffer.
+     * ParticleSystem.update() intentionally ignores
+     * SHUFFLE state.
+     *
+     * Therefore we mark the system as SHUFFLE before
+     * starting the animation.
      *
      */
 
@@ -198,24 +205,19 @@ export function shuffleParticles(
 
     /*
      * =====================================================
-     * SAVE ORIGINAL LIVE POSITIONS
+     * SAVE CURRENT VISIBLE POSITIONS
      * =====================================================
      *
      * IMPORTANT:
      *
-     * We save the CURRENT visible positions,
-     * not simply data.positions.
+     * Save the actual GPU-side runtime positions.
      *
-     * This matters because ParticleSystem may
-     * already have drift/breathing applied.
+     * Do NOT use:
      *
-     * Therefore:
+     *     data.positions
      *
-     * current visible position
-     *          ↓
-     * temporary shuffle
-     *          ↓
-     * exact current visible position
+     * because ParticleSystem may currently have
+     * breathing / drift applied.
      *
      */
 
@@ -235,7 +237,7 @@ export function shuffleParticles(
 
     /*
      * =====================================================
-     * CREATE RANDOM OFFSETS
+     * RANDOM OFFSETS
      * =====================================================
      */
 
@@ -255,10 +257,6 @@ export function shuffleParticles(
             i * 3;
 
 
-        /*
-         * Random vector.
-         */
-
         let x =
             Math.random() * 2 -
             1;
@@ -274,20 +272,38 @@ export function shuffleParticles(
             1;
 
 
-        /*
-         * Normalize direction.
-         */
-
-        const length =
+        let length =
             Math.sqrt(
 
                 x * x +
-
                 y * y +
-
                 z * z
 
-            ) || 1;
+            );
+
+
+        /*
+         * Extremely unlikely, but avoid
+         * zero-length direction.
+         */
+
+        if (
+            length <
+            0.000001
+        ) {
+
+            x =
+                1;
+
+            y =
+                0;
+
+            z =
+                0;
+
+            length =
+                1;
+        }
 
 
         x /=
@@ -303,13 +319,10 @@ export function shuffleParticles(
 
 
         /*
-         * Random displacement.
+         * Controlled shuffle radius.
          *
-         * Keep this controlled.
-         *
-         * The purpose is a visible
-         * particle shuffle, not a
-         * complete explosion.
+         * This is deliberately much smaller
+         * than an explosion.
          */
 
         const distance =
@@ -335,27 +348,31 @@ export function shuffleParticles(
 
     /*
      * =====================================================
-     * SAVE PREVIOUS STATE
+     * STATE
      * =====================================================
      */
 
     const previousState =
-        data.state;
+        data.state ||
+        "STABLE";
 
 
     data.state =
         "SHUFFLE";
 
 
+    console.log(
+        "[ParticleShuffle] START:",
+        count,
+        "PARTICLES"
+    );
+
+
     /*
      * =====================================================
-     * ANIMATION START
+     * ANIMATION
      * =====================================================
      */
-
-    const start =
-        performance.now();
-
 
     return new Promise(
         resolve => {
@@ -364,13 +381,19 @@ export function shuffleParticles(
                 false;
 
 
+            let frameId =
+                null;
+
+
             /*
              * =================================================
              * FINISH
              * =================================================
              */
 
-            function finish() {
+            function finish(
+                restoreState = true
+            ) {
 
                 if (
                     finished
@@ -385,7 +408,26 @@ export function shuffleParticles(
 
 
                 /*
-                 * Restore EXACT original
+                 * Cancel pending frame.
+                 */
+
+                if (
+                    frameId !== null &&
+                    typeof cancelAnimationFrame ===
+                    "function"
+                ) {
+
+                    cancelAnimationFrame(
+                        frameId
+                    );
+
+                    frameId =
+                        null;
+                }
+
+
+                /*
+                 * ALWAYS restore exact original
                  * visible positions.
                  */
 
@@ -402,13 +444,22 @@ export function shuffleParticles(
                 /*
                  * Restore previous state.
                  *
-                 * If the previous state is
-                 * unavailable, fall back to STABLE.
+                 * Never leave the system stuck
+                 * in SHUFFLE.
                  */
 
-                data.state =
-                    previousState ||
-                    "STABLE";
+                if (
+                    restoreState
+                ) {
+
+                    data.state =
+                        previousState ===
+                        "SHUFFLE"
+
+                            ? "STABLE"
+
+                            : previousState;
+                }
 
 
                 console.log(
@@ -422,7 +473,7 @@ export function shuffleParticles(
 
             /*
              * =================================================
-             * ANIMATION FRAME
+             * FRAME
              * =================================================
              */
 
@@ -442,39 +493,28 @@ export function shuffleParticles(
 
                     const elapsed =
                         now -
-                        start;
+                        startTime;
 
 
                     const progress =
                         Math.min(
-
                             1,
-
-                            elapsed /
-                            safeDuration
-
+                            Math.max(
+                                0,
+                                elapsed /
+                                safeDuration
+                            )
                         );
 
 
                     /*
-                     * =================================================
-                     * SHUFFLE CURVE
-                     * =================================================
+                     * Smooth out-and-back.
+                     *
+                     * 0       → original
+                     * 0.5     → maximum shuffle
+                     * 1       → original
                      *
                      * sin(πt)
-                     *
-                     * t = 0
-                     *      ↓
-                     * original
-                     *
-                     * t = 0.5
-                     *      ↓
-                     * maximum expansion
-                     *
-                     * t = 1
-                     *      ↓
-                     * original
-                     *
                      */
 
                     const factor =
@@ -486,7 +526,7 @@ export function shuffleParticles(
 
                     /*
                      * =================================================
-                     * APPLY TEMPORARY DISPLACEMENT
+                     * APPLY TEMPORARY OFFSET
                      * =================================================
                      */
 
@@ -525,11 +565,6 @@ export function shuffleParticles(
                     }
 
 
-                    /*
-                     * Tell THREE.js that the
-                     * GPU buffer changed.
-                     */
-
                     positionAttribute
                         .needsUpdate =
                         true;
@@ -537,7 +572,7 @@ export function shuffleParticles(
 
                     /*
                      * =================================================
-                     * COMPLETE
+                     * END
                      * =================================================
                      */
 
@@ -551,9 +586,10 @@ export function shuffleParticles(
                     }
 
 
-                    requestAnimationFrame(
-                        animate
-                    );
+                    frameId =
+                        requestAnimationFrame(
+                            animate
+                        );
 
                 } catch (error) {
 
@@ -564,8 +600,7 @@ export function shuffleParticles(
 
 
                     /*
-                     * Even if something goes wrong,
-                     * restore the particle system.
+                     * Recovery is mandatory.
                      */
 
                     finish();
@@ -573,22 +608,38 @@ export function shuffleParticles(
             }
 
 
+            const startTime =
+                typeof performance !==
+                "undefined"
+                    ? performance.now()
+                    : Date.now();
+
+
             /*
              * =================================================
-             * START
+             * START FRAME
              * =================================================
              */
 
-            console.log(
-                "[ParticleShuffle] START:",
-                count,
-                "PARTICLES"
-            );
+            if (
+                typeof requestAnimationFrame !==
+                "function"
+            ) {
+
+                /*
+                 * Extremely defensive fallback.
+                 */
+
+                finish();
+
+                return;
+            }
 
 
-            requestAnimationFrame(
-                animate
-            );
+            frameId =
+                requestAnimationFrame(
+                    animate
+                );
         }
     );
 }
