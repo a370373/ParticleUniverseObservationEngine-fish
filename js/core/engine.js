@@ -8,6 +8,7 @@ import {
     shouldEnterAmbient
 } from "../universe/ambient.js";
 
+
 export class Engine {
 
     constructor(
@@ -19,6 +20,10 @@ export class Engine {
         observer,
         roaming
     ) {
+
+        console.log(
+            "[ENGINE] CONSTRUCTOR"
+        );
 
         this.renderer =
             renderer;
@@ -41,23 +46,64 @@ export class Engine {
         this.roaming =
             roaming;
 
-        this.ambient =
-            new AmbientController(
-                cameraController
+        try {
+
+            this.ambient =
+                new AmbientController(
+                    cameraController
+                );
+
+            console.log(
+                "[ENGINE] AMBIENT CREATED"
             );
+
+        } catch (error) {
+
+            console.error(
+                "[ENGINE] AMBIENT ERROR:",
+                error
+            );
+
+            this.ambient =
+                null;
+        }
+
 
         this.running =
             false;
 
         this.last =
             performance.now();
+
+        this.frameCount =
+            0;
     }
+
+
+    /*
+     * =====================================================
+     * START
+     * =====================================================
+     */
 
     start() {
 
-        if (this.running) {
+        if (
+            this.running
+        ) {
+
+            console.warn(
+                "[ENGINE] ALREADY RUNNING"
+            );
+
             return;
         }
+
+
+        console.log(
+            "[ENGINE] START"
+        );
+
 
         this.running =
             true;
@@ -70,64 +116,213 @@ export class Engine {
         );
     }
 
-    frame(now) {
 
-        if (!this.running) {
+    /*
+     * =====================================================
+     * FRAME
+     * =====================================================
+     */
+
+    frame(
+        now
+    ) {
+
+        if (
+            !this.running
+        ) {
+
             return;
         }
+
+
+        this.frameCount++;
+
+
+        /*
+         * Only print the first few frames
+         * so console does not explode.
+         */
+
+        if (
+            this.frameCount <= 10
+        ) {
+
+            console.log(
+                "[ENGINE] FRAME",
+                this.frameCount
+            );
+        }
+
 
         const dt =
             Math.min(
                 0.05,
-                (now - this.last) /
-                1000
+                (
+                    now -
+                    this.last
+                ) / 1000
             );
+
 
         this.last =
             now;
 
-        updateIdle(now);
+
+        /*
+         * =================================================
+         * IDLE
+         * =================================================
+         */
+
+        try {
+
+            updateIdle(
+                now
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[ENGINE] updateIdle ERROR:",
+                error
+            );
+        }
+
+
+        /*
+         * =================================================
+         * CAMERA / AMBIENT
+         * =================================================
+         */
 
         if (
             !STATE.observationLocked
         ) {
 
-            if (
-                shouldEnterAmbient(
-                    STATE.idleTime
-                )
-            ) {
+            try {
 
                 if (
-                    !STATE.ambient
+                    shouldEnterAmbient(
+                        STATE.idleTime
+                    )
                 ) {
 
-                    STATE.ambient =
-                        true;
+                    if (
+                        !STATE.ambient
+                    ) {
+
+                        STATE.ambient =
+                            true;
+
+                        console.log(
+                            "[ENGINE] AMBIENT ENTER"
+                        );
+                    }
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "[ENGINE] AMBIENT CHECK ERROR:",
+                    error
+                );
+            }
+
+
+            /*
+             * Ambient controller
+             */
+
+            if (
+                this.ambient
+            ) {
+
+                try {
+
+                    this.ambient.update(
+                        dt
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "[ENGINE] AMBIENT UPDATE ERROR:",
+                        error
+                    );
                 }
             }
 
-            this.ambient.update(
+
+            /*
+             * Camera controller
+             */
+
+            try {
+
+                this.cameraController
+                    .update(
+                        dt
+                    );
+
+            } catch (error) {
+
+                console.error(
+                    "[ENGINE] CAMERA UPDATE ERROR:",
+                    error
+                );
+            }
+        }
+
+
+        /*
+         * =================================================
+         * UNIVERSE
+         * =================================================
+         */
+
+        try {
+
+            this.universe.update(
+                now,
                 dt
             );
 
-            this.cameraController
-                .update(dt);
+        } catch (error) {
+
+            console.error(
+                "[ENGINE] UNIVERSE UPDATE ERROR:",
+                error
+            );
         }
 
-        this.universe.update(
-            now,
-            dt
-        );
-
-        this.roaming.update(
-            dt
-        );
 
         /*
-         * Observation is disabled
-         * during ambient mode.
+         * =================================================
+         * ROAMING
+         * =================================================
          */
+
+        try {
+
+            this.roaming.update(
+                dt
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[ENGINE] ROAMING UPDATE ERROR:",
+                error
+            );
+        }
+
+
+        /*
+         * =================================================
+         * OBSERVER
+         * =================================================
+         */
+
         if (
             !STATE.ambient &&
             !STATE.observationLocked &&
@@ -135,42 +330,141 @@ export class Engine {
             !STATE.shuffle
         ) {
 
-            this.observer.ambient =
-                false;
+            try {
 
-            const result =
-                this.observer.update(
-                    now
+                this.observer.ambient =
+                    false;
+
+
+                const result =
+                    this.observer.update(
+                        now
+                    );
+
+
+                if (
+                    result &&
+                    result.completed
+                ) {
+
+                    console.log(
+                        "[ENGINE] OBSERVATION COMPLETE"
+                    );
+
+
+                    this.universe
+                        .completeObservation();
+
+                } else if (
+                    result &&
+                    result.failed
+                ) {
+
+                    console.log(
+                        "[ENGINE] OBSERVATION FAILED"
+                    );
+
+
+                    this.universe
+                        .shuffle();
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "[ENGINE] OBSERVER ERROR:",
+                    error
                 );
-
-            if (
-                result.completed
-            ) {
-
-                this.universe
-                    .completeObservation();
-
-            } else if (
-                result.failed
-            ) {
-
-                this.universe
-                    .shuffle();
             }
         }
 
-        if (
-            this.renderer
-        ) {
 
-            this.renderer.render(
-                this.scene,
-                this.camera
+        /*
+         * =================================================
+         * RENDER
+         * =================================================
+         */
+
+        try {
+
+            if (
+                !this.renderer
+            ) {
+
+                console.error(
+                    "[ENGINE] RENDERER MISSING"
+                );
+
+            } else if (
+                !this.scene
+            ) {
+
+                console.error(
+                    "[ENGINE] SCENE MISSING"
+                );
+
+            } else if (
+                !this.camera
+            ) {
+
+                console.error(
+                    "[ENGINE] CAMERA MISSING"
+                );
+
+            } else {
+
+                this.renderer.render(
+                    this.scene,
+                    this.camera
+                );
+
+
+                if (
+                    this.frameCount <= 10
+                ) {
+
+                    console.log(
+                        "[ENGINE] RENDER OK"
+                    );
+                }
+            }
+
+        } catch (error) {
+
+            console.error(
+                "[ENGINE] RENDER ERROR:",
+                error
             );
         }
 
+
+        /*
+         * =================================================
+         * NEXT FRAME
+         * =================================================
+         */
+
         requestAnimationFrame(
-            this.frame.bind(this)
+            this.frame.bind(
+                this
+            )
         );
+    }
+
+
+    /*
+     * =====================================================
+     * STOP
+     * =====================================================
+     */
+
+    stop() {
+
+        console.log(
+            "[ENGINE] STOP"
+        );
+
+        this.running =
+            false;
     }
 }
