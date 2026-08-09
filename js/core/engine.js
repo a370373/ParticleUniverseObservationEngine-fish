@@ -1,3 +1,10 @@
+/*
+ * =========================================================
+ * ENGINE
+ * MINIMAL VISUAL TEST
+ * =========================================================
+ */
+
 import {
     updateIdle,
     STATE
@@ -22,8 +29,9 @@ export class Engine {
     ) {
 
         console.log(
-            "[ENGINE] CONSTRUCTOR"
+            "[Engine] CONSTRUCTOR"
         );
+
 
         this.renderer =
             renderer;
@@ -46,37 +54,24 @@ export class Engine {
         this.roaming =
             roaming;
 
-        try {
 
-            this.ambient =
-                new AmbientController(
-                    cameraController
-                );
-
-            console.log(
-                "[ENGINE] AMBIENT CREATED"
+        this.ambient =
+            new AmbientController(
+                cameraController
             );
-
-        } catch (error) {
-
-            console.error(
-                "[ENGINE] AMBIENT ERROR:",
-                error
-            );
-
-            this.ambient =
-                null;
-        }
 
 
         this.running =
             false;
 
+
         this.last =
             performance.now();
 
-        this.frameCount =
-            0;
+
+        console.log(
+            "[Engine] READY"
+        );
     }
 
 
@@ -92,24 +87,22 @@ export class Engine {
             this.running
         ) {
 
-            console.warn(
-                "[ENGINE] ALREADY RUNNING"
-            );
-
             return;
         }
-
-
-        console.log(
-            "[ENGINE] START"
-        );
 
 
         this.running =
             true;
 
+
         this.last =
             performance.now();
+
+
+        console.log(
+            "[Engine] LOOP START"
+        );
+
 
         requestAnimationFrame(
             this.frame.bind(this)
@@ -135,32 +128,11 @@ export class Engine {
         }
 
 
-        this.frameCount++;
-
-
-        /*
-         * Only print the first few frames
-         * so console does not explode.
-         */
-
-        if (
-            this.frameCount <= 10
-        ) {
-
-            console.log(
-                "[ENGINE] FRAME",
-                this.frameCount
-            );
-        }
-
-
         const dt =
             Math.min(
                 0.05,
-                (
-                    now -
-                    this.last
-                ) / 1000
+                (now - this.last) /
+                1000
             );
 
 
@@ -170,7 +142,7 @@ export class Engine {
 
         /*
          * =================================================
-         * IDLE
+         * STATE
          * =================================================
          */
 
@@ -183,7 +155,7 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[ENGINE] updateIdle ERROR:",
+                "[Engine] updateIdle error:",
                 error
             );
         }
@@ -191,15 +163,15 @@ export class Engine {
 
         /*
          * =================================================
-         * CAMERA / AMBIENT
+         * CAMERA
          * =================================================
          */
 
-        if (
-            !STATE.observationLocked
-        ) {
+        try {
 
-            try {
+            if (
+                !STATE.observationLocked
+            ) {
 
                 if (
                     shouldEnterAmbient(
@@ -213,64 +185,27 @@ export class Engine {
 
                         STATE.ambient =
                             true;
-
-                        console.log(
-                            "[ENGINE] AMBIENT ENTER"
-                        );
                     }
                 }
 
-            } catch (error) {
 
-                console.error(
-                    "[ENGINE] AMBIENT CHECK ERROR:",
-                    error
+                this.ambient.update(
+                    dt
                 );
-            }
 
-
-            /*
-             * Ambient controller
-             */
-
-            if (
-                this.ambient
-            ) {
-
-                try {
-
-                    this.ambient.update(
-                        dt
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "[ENGINE] AMBIENT UPDATE ERROR:",
-                        error
-                    );
-                }
-            }
-
-
-            /*
-             * Camera controller
-             */
-
-            try {
 
                 this.cameraController
                     .update(
                         dt
                     );
-
-            } catch (error) {
-
-                console.error(
-                    "[ENGINE] CAMERA UPDATE ERROR:",
-                    error
-                );
             }
+
+        } catch (error) {
+
+            console.error(
+                "[Engine] CAMERA ERROR:",
+                error
+            );
         }
 
 
@@ -282,15 +217,20 @@ export class Engine {
 
         try {
 
-            this.universe.update(
-                now,
-                dt
-            );
+            if (
+                this.universe
+            ) {
+
+                this.universe.update(
+                    now,
+                    dt
+                );
+            }
 
         } catch (error) {
 
             console.error(
-                "[ENGINE] UNIVERSE UPDATE ERROR:",
+                "[Engine] UNIVERSE ERROR:",
                 error
             );
         }
@@ -304,14 +244,19 @@ export class Engine {
 
         try {
 
-            this.roaming.update(
-                dt
-            );
+            if (
+                this.roaming
+            ) {
+
+                this.roaming.update(
+                    dt
+                );
+            }
 
         } catch (error) {
 
             console.error(
-                "[ENGINE] ROAMING UPDATE ERROR:",
+                "[Engine] ROAMING ERROR:",
                 error
             );
         }
@@ -320,63 +265,16 @@ export class Engine {
         /*
          * =================================================
          * OBSERVER
+         *
+         * DISABLED IN TEST MODE
          * =================================================
          */
 
-        if (
-            !STATE.ambient &&
-            !STATE.observationLocked &&
-            !STATE.observationComplete &&
-            !STATE.shuffle
-        ) {
-
-            try {
-
-                this.observer.ambient =
-                    false;
-
-
-                const result =
-                    this.observer.update(
-                        now
-                    );
-
-
-                if (
-                    result &&
-                    result.completed
-                ) {
-
-                    console.log(
-                        "[ENGINE] OBSERVATION COMPLETE"
-                    );
-
-
-                    this.universe
-                        .completeObservation();
-
-                } else if (
-                    result &&
-                    result.failed
-                ) {
-
-                    console.log(
-                        "[ENGINE] OBSERVATION FAILED"
-                    );
-
-
-                    this.universe
-                        .shuffle();
-                }
-
-            } catch (error) {
-
-                console.error(
-                    "[ENGINE] OBSERVER ERROR:",
-                    error
-                );
-            }
-        }
+        /*
+         * 不執行 observer。
+         *
+         * 等畫面成功顯示後再重新接回。
+         */
 
 
         /*
@@ -388,51 +286,21 @@ export class Engine {
         try {
 
             if (
-                !this.renderer
+                this.renderer &&
+                this.scene &&
+                this.camera
             ) {
-
-                console.error(
-                    "[ENGINE] RENDERER MISSING"
-                );
-
-            } else if (
-                !this.scene
-            ) {
-
-                console.error(
-                    "[ENGINE] SCENE MISSING"
-                );
-
-            } else if (
-                !this.camera
-            ) {
-
-                console.error(
-                    "[ENGINE] CAMERA MISSING"
-                );
-
-            } else {
 
                 this.renderer.render(
                     this.scene,
                     this.camera
                 );
-
-
-                if (
-                    this.frameCount <= 10
-                ) {
-
-                    console.log(
-                        "[ENGINE] RENDER OK"
-                    );
-                }
             }
 
         } catch (error) {
 
             console.error(
-                "[ENGINE] RENDER ERROR:",
+                "[Engine] RENDER ERROR:",
                 error
             );
         }
@@ -445,26 +313,7 @@ export class Engine {
          */
 
         requestAnimationFrame(
-            this.frame.bind(
-                this
-            )
+            this.frame.bind(this)
         );
-    }
-
-
-    /*
-     * =====================================================
-     * STOP
-     * =====================================================
-     */
-
-    stop() {
-
-        console.log(
-            "[ENGINE] STOP"
-        );
-
-        this.running =
-            false;
     }
 }

@@ -1,35 +1,9 @@
 /*
  * =========================================================
- * PARTICLE UNIVERSE — MINIMAL VISUAL TEST
- * =========================================================
- *
- * 目的：
- * 先確認：
- *
- * THREE
- *   ↓
- * Scene
- *   ↓
- * Camera
- *   ↓
- * Points
- *   ↓
- * Renderer
- *
- * 整條渲染管線正常。
- *
- * 暫時不使用：
- * - nebula-generator
- * - Base64 image
- * - ParticleSystem
- * - Observer
- * - Roaming
- * - Shuffle
- * - Observation
- *
+ * PARTICLE UNIVERSE
+ * MINIMAL VISUAL TEST
  * =========================================================
  */
-
 
 export class Universe {
 
@@ -38,6 +12,10 @@ export class Universe {
         scene,
         cameraController
     ) {
+
+        console.log(
+            "[Universe] CONSTRUCTOR START"
+        );
 
         this.THREE =
             THREE;
@@ -66,16 +44,16 @@ export class Universe {
 
         /*
          * =================================================
-         * CREATE STAR FIELD
+         * CREATE VISIBLE STARS
          * =================================================
          */
 
-        this.createStarField();
+        this.createStars();
 
 
         /*
          * =================================================
-         * CREATE DUST
+         * CREATE VISIBLE DUST
          * =================================================
          */
 
@@ -93,25 +71,25 @@ export class Universe {
 
 
         console.log(
-            "[Universe] MINIMAL UNIVERSE READY"
+            "[Universe] READY"
         );
     }
 
 
     /*
      * =====================================================
-     * STAR FIELD
+     * STARS
      * =====================================================
      */
 
-    createStarField() {
+    createStars() {
 
         const THREE =
             this.THREE;
 
 
         const count =
-            5000;
+            4000;
 
 
         const geometry =
@@ -136,67 +114,46 @@ export class Universe {
             i++
         ) {
 
-            const index =
+            const n =
                 i * 3;
 
 
             /*
-             * Large spherical universe
+             * Camera looks toward -Z.
+             *
+             * Put stars directly
+             * inside the visible area.
              */
 
-            const radius =
-                200 +
-                Math.random() * 1800;
+            positions[n] =
+                (Math.random() - 0.5) *
+                1600;
 
 
-            const theta =
+            positions[n + 1] =
+                (Math.random() - 0.5) *
+                900;
+
+
+            positions[n + 2] =
+                -100 -
                 Math.random() *
-                Math.PI *
-                2;
+                1400;
 
-
-            const phi =
-                Math.acos(
-                    Math.random() * 2 - 1
-                );
-
-
-            positions[index] =
-                radius *
-                Math.sin(phi) *
-                Math.cos(theta);
-
-
-            positions[index + 1] =
-                radius *
-                Math.sin(phi) *
-                Math.sin(theta);
-
-
-            positions[index + 2] =
-                radius *
-                Math.cos(phi);
-
-
-            /*
-             * Slightly varied brightness
-             */
 
             const brightness =
-                0.35 +
+                0.5 +
                 Math.random() *
-                0.65;
+                0.5;
 
 
-            colors[index] =
+            colors[n] =
                 brightness;
 
-
-            colors[index + 1] =
+            colors[n + 1] =
                 brightness;
 
-
-            colors[index + 2] =
+            colors[n + 2] =
                 brightness;
         }
 
@@ -223,7 +180,7 @@ export class Universe {
             new THREE.PointsMaterial({
 
                 size:
-                    2.5,
+                    3,
 
                 vertexColors:
                     true,
@@ -232,7 +189,7 @@ export class Universe {
                     true,
 
                 opacity:
-                    0.9,
+                    1,
 
                 depthWrite:
                     false,
@@ -252,6 +209,12 @@ export class Universe {
         this.scene.add(
             this.stars
         );
+
+
+        console.log(
+            "[Universe] STARS ADDED:",
+            count
+        );
     }
 
 
@@ -268,7 +231,7 @@ export class Universe {
 
 
         const count =
-            1800;
+            1200;
 
 
         const geometry =
@@ -287,42 +250,24 @@ export class Universe {
             i++
         ) {
 
-            const index =
+            const n =
                 i * 3;
 
 
-            const radius =
-                100 +
-                Math.random() * 1000;
+            positions[n] =
+                (Math.random() - 0.5) *
+                1300;
 
 
-            const theta =
+            positions[n + 1] =
+                (Math.random() - 0.5) *
+                750;
+
+
+            positions[n + 2] =
+                -120 -
                 Math.random() *
-                Math.PI *
-                2;
-
-
-            const phi =
-                Math.acos(
-                    Math.random() * 2 - 1
-                );
-
-
-            positions[index] =
-                radius *
-                Math.sin(phi) *
-                Math.cos(theta);
-
-
-            positions[index + 1] =
-                radius *
-                Math.sin(phi) *
-                Math.sin(theta);
-
-
-            positions[index + 2] =
-                radius *
-                Math.cos(phi);
+                1100;
         }
 
 
@@ -339,16 +284,16 @@ export class Universe {
             new THREE.PointsMaterial({
 
                 size:
-                    1.2,
+                    5,
 
                 color:
-                    0x6688aa,
+                    0x8899ff,
 
                 transparent:
                     true,
 
                 opacity:
-                    0.25,
+                    0.2,
 
                 depthWrite:
                     false,
@@ -368,6 +313,12 @@ export class Universe {
         this.scene.add(
             this.dust
         );
+
+
+        console.log(
+            "[Universe] DUST ADDED:",
+            count
+        );
     }
 
 
@@ -382,16 +333,12 @@ export class Universe {
         dt
     ) {
 
-        /*
-         * Slowly rotate the universe.
-         */
-
         if (
             this.stars
         ) {
 
             this.stars.rotation.y +=
-                dt * 0.02;
+                dt * 0.01;
         }
 
 
@@ -400,25 +347,21 @@ export class Universe {
         ) {
 
             this.dust.rotation.y -=
-                dt * 0.008;
+                dt * 0.005;
         }
     }
 
 
     /*
      * =====================================================
-     * PLACEHOLDER METHODS
+     * PLACEHOLDERS
      * =====================================================
-     *
-     * These keep the rest of the application from
-     * crashing while we are testing the renderer.
      */
-
 
     async startNewCycle() {
 
         console.log(
-            "[Universe] startNewCycle() ignored during minimal test."
+            "[Universe] startNewCycle TEST MODE"
         );
     }
 
@@ -426,7 +369,7 @@ export class Universe {
     async shuffle() {
 
         console.log(
-            "[Universe] shuffle() ignored during minimal test."
+            "[Universe] shuffle TEST MODE"
         );
     }
 
@@ -434,7 +377,7 @@ export class Universe {
     async completeObservation() {
 
         console.log(
-            "[Universe] completeObservation() ignored during minimal test."
+            "[Universe] observation TEST MODE"
         );
     }
 
