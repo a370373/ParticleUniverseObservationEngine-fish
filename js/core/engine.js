@@ -1,7 +1,6 @@
 /*
  * =========================================================
  * ENGINE
- * FULL PARTICLE UNIVERSE RUNTIME
  * =========================================================
  */
 
@@ -64,23 +63,11 @@ export class Engine {
         this.last =
             performance.now();
 
-        this.frameCount =
-            0;
-
-        this.lastDebug =
-            0;
-
         console.log(
             "[Engine] READY"
         );
     }
 
-
-    /*
-     * =====================================================
-     * START
-     * =====================================================
-     */
 
     start() {
 
@@ -88,8 +75,8 @@ export class Engine {
             this.running
         ) {
 
-            console.warn(
-                "[Engine] START IGNORED: ALREADY RUNNING"
+            console.log(
+                "[Engine] ALREADY RUNNING"
             );
 
             return;
@@ -111,29 +98,6 @@ export class Engine {
     }
 
 
-    /*
-     * =====================================================
-     * STOP
-     * =====================================================
-     */
-
-    stop() {
-
-        this.running =
-            false;
-
-        console.log(
-            "[Engine] LOOP STOP"
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * FRAME
-     * =====================================================
-     */
-
     frame(
         now
     ) {
@@ -145,60 +109,15 @@ export class Engine {
             return;
         }
 
-
-        this.frameCount++;
-
-
         const dt =
             Math.min(
                 0.05,
-                Math.max(
-                    0,
-                    (now - this.last) /
-                    1000
-                )
+                (now - this.last) / 1000
             );
-
 
         this.last =
             now;
 
-
-        /*
-         * =================================================
-         * PERIODIC DEBUG
-         * =================================================
-         *
-         * 每約 3 秒印一次，
-         * 避免 console 被每幀 log 爆。
-         */
-
-        if (
-            now - this.lastDebug >
-            3000
-        ) {
-
-            this.lastDebug =
-                now;
-
-            console.log(
-                "[Engine] FRAME:",
-                this.frameCount,
-                "DT:",
-                dt.toFixed(4),
-                "PHASE:",
-                STATE.phase,
-                "IDLE:",
-                STATE.idleTime
-            );
-        }
-
-
-        /*
-         * =================================================
-         * IDLE
-         * =================================================
-         */
 
         try {
 
@@ -209,17 +128,11 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] IDLE ERROR:",
+                "[Engine] STATE ERROR:",
                 error
             );
         }
 
-
-        /*
-         * =================================================
-         * AMBIENT + CAMERA
-         * =================================================
-         */
 
         try {
 
@@ -240,9 +153,6 @@ export class Engine {
                         STATE.ambient =
                             true;
 
-                        console.log(
-                            "[Engine] AMBIENT ENTER"
-                        );
                     }
                 }
 
@@ -252,31 +162,19 @@ export class Engine {
                 );
 
 
-                if (
-                    this.cameraController
-                ) {
-
-                    this.cameraController
-                        .update(
-                            dt
-                        );
-                }
+                this.cameraController.update(
+                    dt
+                );
             }
 
         } catch (error) {
 
             console.error(
-                "[Engine] CAMERA / AMBIENT ERROR:",
+                "[Engine] CAMERA ERROR:",
                 error
             );
         }
 
-
-        /*
-         * =================================================
-         * UNIVERSE
-         * =================================================
-         */
 
         try {
 
@@ -293,17 +191,11 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] UNIVERSE UPDATE ERROR:",
+                "[Engine] UNIVERSE ERROR:",
                 error
             );
         }
 
-
-        /*
-         * =================================================
-         * ROAMING
-         * =================================================
-         */
 
         try {
 
@@ -326,85 +218,11 @@ export class Engine {
 
 
         /*
-         * =================================================
-         * OBSERVER
-         * =================================================
-         *
-         * 這裡重新接回完整觀察系統。
+         * Observer temporarily disabled.
+         * We reconnect it after the visual pipeline
+         * is confirmed working.
          */
 
-        try {
-
-            if (
-                !STATE.ambient &&
-                !STATE.observationLocked &&
-                !STATE.observationComplete &&
-                !STATE.shuffle &&
-                this.observer
-            ) {
-
-                this.observer.ambient =
-                    false;
-
-
-                const result =
-                    this.observer.update(
-                        now
-                    );
-
-
-                if (
-                    result &&
-                    result.completed
-                ) {
-
-                    console.log(
-                        "[Engine] OBSERVATION COMPLETED"
-                    );
-
-
-                    if (
-                        this.universe
-                    ) {
-
-                        this.universe
-                            .completeObservation();
-                    }
-
-                } else if (
-                    result &&
-                    result.failed
-                ) {
-
-                    console.log(
-                        "[Engine] OBSERVATION FAILED -> SHUFFLE"
-                    );
-
-
-                    if (
-                        this.universe
-                    ) {
-
-                        this.universe
-                            .shuffle();
-                    }
-                }
-            }
-
-        } catch (error) {
-
-            console.error(
-                "[Engine] OBSERVER ERROR:",
-                error
-            );
-        }
-
-
-        /*
-         * =================================================
-         * RENDER
-         * =================================================
-         */
 
         try {
 
@@ -418,6 +236,7 @@ export class Engine {
                     this.scene,
                     this.camera
                 );
+
             }
 
         } catch (error) {
@@ -428,12 +247,6 @@ export class Engine {
             );
         }
 
-
-        /*
-         * =================================================
-         * NEXT FRAME
-         * =================================================
-         */
 
         requestAnimationFrame(
             this.frame.bind(this)
