@@ -3,11 +3,13 @@
  * PARTICLE UNIVERSE
  * OBSERVATION DETECTOR
  *
- * Hidden Observation Target
+ * Pure Observation Validator
+ *
+ * 負責：
  *
  * Camera
  *   ↓
- * Orientation
+ * Rotation
  *   ↓
  * Distance
  *   ↓
@@ -16,10 +18,21 @@
  * Scale
  *   ↓
  * Observation Score
- *   ↓
- * Hold ~2 seconds
- *   ↓
- * Observation Complete
+ *
+ * IMPORTANT
+ * ---------------------------------------------------------
+ * Detector ONLY calculates observation validity.
+ *
+ * Detector DOES NOT:
+ *
+ * - start observation event
+ * - lock controls
+ * - play / pause audio
+ * - collapse particles
+ * - explode particles
+ * - call universe.completeObservation()
+ *
+ * Observer / Universe 負責事件流程。
  * =========================================================
  */
 
@@ -27,21 +40,8 @@ import {
     CONFIG
 } from "../config.js";
 
-import {
-    STATE
-} from "../core/state.js";
-
-
-/*
- * =========================================================
- * DEFAULT CONFIG
- * =========================================================
- */
 
 const DEFAULTS = {
-
-    HOLD_TIME:
-        2000,
 
     ANGLE_TOLERANCE:
         0.12,
@@ -60,12 +60,6 @@ const DEFAULTS = {
 };
 
 
-/*
- * =========================================================
- * OBSERVATION DETECTOR
- * =========================================================
- */
-
 export class ObservationDetector {
 
     constructor(
@@ -81,33 +75,20 @@ export class ObservationDetector {
         this.cameraController =
             cameraController;
 
-
         this.universe =
             universe;
-
 
         this.currentNebula =
             null;
 
-
-        this.holdStart =
-            0;
-
-
-        this.completed =
-            false;
-
-
-        this.active =
-            false;
-
-
         this.lastScore =
             0;
 
-
         this.lastResult =
             null;
+
+        this.active =
+            false;
 
 
         console.log(
@@ -130,8 +111,10 @@ export class ObservationDetector {
             !nebula
         ) {
 
+            this.reset();
+
             console.warn(
-                "[ObservationDetector] ATTACH FAILED: no nebula"
+                "[ObservationDetector] ATTACH FAILED"
             );
 
             return;
@@ -141,22 +124,11 @@ export class ObservationDetector {
         this.currentNebula =
             nebula;
 
-
-        this.holdStart =
-            0;
-
-
-        this.completed =
-            false;
-
-
         this.active =
             true;
 
-
         this.lastScore =
             0;
-
 
         this.lastResult =
             null;
@@ -164,7 +136,6 @@ export class ObservationDetector {
 
         nebula.observationScore =
             0;
-
 
         nebula.observationHold =
             0;
@@ -187,22 +158,11 @@ export class ObservationDetector {
         this.currentNebula =
             null;
 
-
-        this.holdStart =
-            0;
-
-
-        this.completed =
-            false;
-
-
         this.active =
             false;
 
-
         this.lastScore =
             0;
-
 
         this.lastResult =
             null;
@@ -212,26 +172,26 @@ export class ObservationDetector {
     /*
      * =====================================================
      * UPDATE
+     *
+     * Pure detector update.
+     *
+     * Returns:
+     *
+     * {
+     *   valid,
+     *   score,
+     *   ...
+     * }
      * =====================================================
      */
 
-    update(
-        now = performance.now()
-    ) {
+    update() {
 
         if (
             !this.active
         ) {
 
-            return;
-        }
-
-
-        if (
-            this.completed
-        ) {
-
-            return;
+            return this.invalidResult();
         }
 
 
@@ -243,13 +203,13 @@ export class ObservationDetector {
             !nebula
         ) {
 
-            return;
+            return this.invalidResult();
         }
 
 
         /*
-         * Only stable nebula can
-         * be observed.
+         * Only stable nebula
+         * can be observed.
          */
 
         if (
@@ -257,27 +217,7 @@ export class ObservationDetector {
             "STABLE"
         ) {
 
-            this.resetHold();
-
-            return;
-        }
-
-
-        /*
-         * Never detect during
-         * another major event.
-         */
-
-        if (
-            STATE.observationEvent ||
-            STATE.observationLocked ||
-            STATE.controlsLocked ||
-            STATE.shuffle
-        ) {
-
-            this.resetHold();
-
-            return;
+            return this.invalidResult();
         }
 
 
@@ -289,7 +229,7 @@ export class ObservationDetector {
             !camera
         ) {
 
-            return;
+            return this.invalidResult();
         }
 
 
@@ -303,7 +243,6 @@ export class ObservationDetector {
         this.lastScore =
             result.score;
 
-
         this.lastResult =
             result;
 
@@ -312,94 +251,63 @@ export class ObservationDetector {
             result.score;
 
 
-        /*
-         * =================================================
-         * SUCCESS WINDOW
-         * =================================================
-         */
-
-        if (
-            result.success
-        ) {
-
-            if (
-                this.holdStart ===
-                0
-            ) {
-
-                this.holdStart =
-                    now;
-
-
-                console.log(
-                    "[ObservationDetector] TARGET ACQUIRED"
-                );
-            }
-
-
-            const held =
-                now -
-                this.holdStart;
-
-
-            nebula.observationHold =
-                held;
-
-
-            const holdTime =
-                getConfig(
-                    "HOLD_TIME",
-                    DEFAULTS.HOLD_TIME
-                );
-
-
-            if (
-                held >=
-                holdTime
-            ) {
-
-                this.complete();
-            }
-
-
-        } else {
-
-            if (
-                this.holdStart !==
-                0
-            ) {
-
-                console.log(
-                    "[ObservationDetector] TARGET LOST"
-                );
-            }
-
-
-            this.resetHold();
-        }
+        return result;
     }
 
 
     /*
      * =====================================================
-     * RESET HOLD
+     * INVALID RESULT
      * =====================================================
      */
 
-    resetHold() {
+    invalidResult() {
 
-        this.holdStart =
+        this.lastScore =
             0;
 
+        this.lastResult =
+            null;
 
-        if (
-            this.currentNebula
-        ) {
 
-            this.currentNebula
-                .observationHold =
-                0;
-        }
+        return {
+
+            valid:
+                false,
+
+            score:
+                0,
+
+            angleScore:
+                0,
+
+            distanceScore:
+                0,
+
+            positionScore:
+                0,
+
+            scaleScore:
+                0,
+
+            yawError:
+                Infinity,
+
+            pitchError:
+                Infinity,
+
+            rollError:
+                Infinity,
+
+            distanceError:
+                Infinity,
+
+            normalizedPositionError:
+                Infinity,
+
+            scaleError:
+                Infinity
+        };
     }
 
 
@@ -422,21 +330,14 @@ export class ObservationDetector {
             !target
         ) {
 
-            return {
-
-                success:
-                    false,
-
-                score:
-                    0
-            };
+            return this.invalidResult();
         }
 
 
         /*
-         * =================================================
-         * CAMERA ROTATION
-         * =================================================
+         * -------------------------------------------------
+         * ROTATION
+         * -------------------------------------------------
          */
 
         const rotation =
@@ -509,29 +410,26 @@ export class ObservationDetector {
 
 
         /*
-         * =================================================
-         * CAMERA DISTANCE
-         * =================================================
+         * -------------------------------------------------
+         * DISTANCE
+         * -------------------------------------------------
          */
 
         const targetDistance =
             Number.isFinite(
-                target.distance
+                Number(
+                    target.distance
+                )
             )
-                ? target.distance
+                ? Number(
+                    target.distance
+                )
                 : 110;
 
 
         const cameraDistance =
             getCameraDistance(
                 camera
-            );
-
-
-        const distanceTolerance =
-            getConfig(
-                "DISTANCE_TOLERANCE",
-                DEFAULTS.DISTANCE_TOLERANCE
             );
 
 
@@ -545,20 +443,17 @@ export class ObservationDetector {
         const distanceScore =
             toleranceScore(
                 distanceError,
-                distanceTolerance
+                getConfig(
+                    "DISTANCE_TOLERANCE",
+                    DEFAULTS.DISTANCE_TOLERANCE
+                )
             );
 
 
         /*
-         * =================================================
-         * CAMERA POSITION
-         * =================================================
-         *
-         * The target position is the intended
-         * camera position.
-         *
-         * If no target position exists,
-         * default to origin.
+         * -------------------------------------------------
+         * POSITION
+         * -------------------------------------------------
          */
 
         const targetPosition =
@@ -578,7 +473,7 @@ export class ObservationDetector {
             );
 
 
-        const positionScale =
+        const positionReference =
             Math.max(
                 1,
                 Math.abs(
@@ -589,27 +484,23 @@ export class ObservationDetector {
 
         const normalizedPositionError =
             positionDistance /
-            positionScale;
-
-
-        const positionTolerance =
-            getConfig(
-                "POSITION_TOLERANCE",
-                DEFAULTS.POSITION_TOLERANCE
-            );
+            positionReference;
 
 
         const positionScore =
             toleranceScore(
                 normalizedPositionError,
-                positionTolerance
+                getConfig(
+                    "POSITION_TOLERANCE",
+                    DEFAULTS.POSITION_TOLERANCE
+                )
             );
 
 
         /*
-         * =================================================
-         * PARTICLE SCALE
-         * =================================================
+         * -------------------------------------------------
+         * SCALE
+         * -------------------------------------------------
          */
 
         const particleObject =
@@ -619,17 +510,22 @@ export class ObservationDetector {
 
 
         const actualScale =
-            particleObject &&
-            particleObject.scale
-                ? particleObject.scale.x
+            particleObject?.scale
+                ? Number(
+                    particleObject.scale.x
+                )
                 : 1;
 
 
         const targetScale =
             Number.isFinite(
-                target.scale
+                Number(
+                    target.scale
+                )
             )
-                ? target.scale
+                ? Number(
+                    target.scale
+                )
                 : 1;
 
 
@@ -640,26 +536,20 @@ export class ObservationDetector {
             );
 
 
-        const scaleTolerance =
-            getConfig(
-                "SCALE_TOLERANCE",
-                DEFAULTS.SCALE_TOLERANCE
-            );
-
-
         const scaleScore =
             toleranceScore(
                 scaleError,
-                scaleTolerance
+                getConfig(
+                    "SCALE_TOLERANCE",
+                    DEFAULTS.SCALE_TOLERANCE
+                )
             );
 
 
         /*
-         * =================================================
+         * -------------------------------------------------
          * FINAL SCORE
-         * =================================================
-         *
-         * Orientation is dominant.
+         * -------------------------------------------------
          */
 
         const score =
@@ -690,14 +580,14 @@ export class ObservationDetector {
             );
 
 
-        const success =
+        const valid =
             score >=
             threshold;
 
 
         return {
 
-            success,
+            valid,
 
             score,
 
@@ -726,87 +616,6 @@ export class ObservationDetector {
 
     /*
      * =====================================================
-     * COMPLETE
-     * =====================================================
-     */
-
-    complete() {
-
-        if (
-            this.completed
-        ) {
-
-            return;
-        }
-
-
-        this.completed =
-            true;
-
-
-        this.active =
-            false;
-
-
-        this.holdStart =
-            0;
-
-
-        if (
-            this.currentNebula
-        ) {
-
-            this.currentNebula
-                .observationScore =
-                1;
-
-
-            this.currentNebula
-                .observationHold =
-                getConfig(
-                    "HOLD_TIME",
-                    DEFAULTS.HOLD_TIME
-                );
-        }
-
-
-        console.log(
-            "[ObservationDetector] OBSERVATION COMPLETE"
-        );
-
-
-        /*
-         * Universe owns the actual
-         * observation event.
-         */
-
-        if (
-            this.universe &&
-            typeof this.universe
-                .completeObservation ===
-            "function"
-        ) {
-
-            Promise.resolve(
-                this.universe
-                    .completeObservation()
-            )
-            .catch(
-                error => {
-
-                    console.error(
-                        "[ObservationDetector] COMPLETE EVENT ERROR:",
-                        error
-                    );
-
-                }
-            );
-        }
-    }
-
-
-    /*
-     * =====================================================
      * CAMERA
      * =====================================================
      */
@@ -814,8 +623,7 @@ export class ObservationDetector {
     getCamera() {
 
         if (
-            this.cameraController &&
-            this.cameraController.camera
+            this.cameraController?.camera
         ) {
 
             return this
@@ -824,15 +632,8 @@ export class ObservationDetector {
         }
 
 
-        if (
-            this.cameraController
-        ) {
-
-            return this.cameraController;
-        }
-
-
-        return null;
+        return this.cameraController ||
+            null;
     }
 
 
@@ -849,22 +650,14 @@ export class ObservationDetector {
             active:
                 this.active,
 
-            completed:
-                this.completed,
-
             score:
                 this.lastScore,
 
-            holdStart:
-                this.holdStart,
-
-            holdDuration:
-                this.currentNebula
-                    ?.observationHold ||
-                0,
-
             result:
-                this.lastResult
+                this.lastResult,
+
+            nebula:
+                this.currentNebula
         };
     }
 }
@@ -881,8 +674,7 @@ function getCameraRotation(
 ) {
 
     if (
-        !camera ||
-        !camera.rotation
+        !camera?.rotation
     ) {
 
         return {
@@ -927,7 +719,7 @@ function getCameraRotation(
 
 /*
  * =========================================================
- * ANGULAR DISTANCE
+ * ANGLE
  * =========================================================
  */
 
@@ -936,24 +728,13 @@ function angularDistance(
     b
 ) {
 
-    const difference =
-        normalizeAngle(
-            a -
-            b
-        );
-
-
     return Math.abs(
-        difference
+        normalizeAngle(
+            a - b
+        )
     );
 }
 
-
-/*
- * =========================================================
- * NORMALIZE ANGLE
- * =========================================================
- */
 
 function normalizeAngle(
     angle
@@ -991,7 +772,7 @@ function normalizeAngle(
 
 /*
  * =========================================================
- * TOLERANCE SCORE
+ * TOLERANCE
  * =========================================================
  */
 
@@ -1075,8 +856,7 @@ function getCameraDistance(
 ) {
 
     if (
-        !camera ||
-        !camera.position
+        !camera?.position
     ) {
 
         return 0;
@@ -1097,14 +877,13 @@ function getCameraDistance(
 
         camera.position.z *
         camera.position.z
-
     );
 }
 
 
 /*
  * =========================================================
- * 3D DISTANCE
+ * DISTANCE 3
  * =========================================================
  */
 
@@ -1123,30 +902,18 @@ function distance3(
 
 
     const dx =
-        Number(
-            a.x
-        ) -
-        Number(
-            b.x
-        );
+        Number(a.x) -
+        Number(b.x);
 
 
     const dy =
-        Number(
-            a.y
-        ) -
-        Number(
-            b.y
-        );
+        Number(a.y) -
+        Number(b.y);
 
 
     const dz =
-        Number(
-            a.z
-        ) -
-        Number(
-            b.z
-        );
+        Number(a.z) -
+        Number(b.z);
 
 
     return Math.sqrt(
@@ -1154,14 +921,13 @@ function distance3(
         dx * dx +
         dy * dy +
         dz * dz
-
     );
 }
 
 
 /*
  * =========================================================
- * VECTOR NORMALIZATION
+ * VECTOR
  * =========================================================
  */
 
@@ -1169,39 +935,21 @@ function normalizeVector3(
     value
 ) {
 
-    if (
-        !value
-    ) {
-
-        return {
-
-            x:
-                0,
-
-            y:
-                0,
-
-            z:
-                0
-        };
-    }
-
-
     return {
 
         x:
             Number(
-                value.x
+                value?.x
             ) || 0,
 
         y:
             Number(
-                value.y
+                value?.y
             ) || 0,
 
         z:
             Number(
-                value.z
+                value?.z
             ) || 0
     };
 }
@@ -1227,18 +975,19 @@ function getConfig(
         if (
             observation &&
             Number.isFinite(
-                observation[key]
+                Number(
+                    observation[key]
+                )
             )
         ) {
 
-            return observation[key];
+            return Number(
+                observation[key]
+            );
         }
 
+    } catch (_) {}
 
-        return fallback;
 
-    } catch (_) {
-
-        return fallback;
-    }
+    return fallback;
 }

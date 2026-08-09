@@ -3,34 +3,25 @@
  * PARTICLE UNIVERSE
  * OBSERVER
  *
- * Observation Validator
+ * Observation Controller
  *
  * 負責：
  *
- * 1. 取得 Camera 狀態
- * 2. 取得 Nebula 隱藏觀測參數
- * 3. 比對：
- *      yaw
- *      pitch
- *      roll
- *      distance
- *      position
- *      scale
- *
- * 4. 判斷是否進入觀測容許範圍
- * 5. 必須持續保持約 2 秒
- * 6. 成功後回傳 completed
- *
- * 注意：
+ * 1. 取得 Nebula
+ * 2. 呼叫 ObservationDetector
+ * 3. 維持約 2 秒 HOLD
+ * 4. 判斷 Observation Complete
+ * 5. Observation Timeout
  *
  * Observer 不負責：
  *
- * - 音樂
- * - 粒子坍縮
- * - 爆炸
+ * - Audio
+ * - Collapse
+ * - Explosion
  * - Shuffle
+ * - Camera animation
  *
- * 那些交給 Universe / Observation Event。
+ * 這些交給 Universe / Observation Event。
  * =========================================================
  */
 
@@ -42,13 +33,18 @@ import {
     CONFIG
 } from "../config.js";
 
+import {
+    ObservationDetector
+} from "./observation-detector.js";
+
 
 export class Observer {
 
     constructor(
         THREE,
         cameraController,
-        nebulaProvider
+        nebulaProvider,
+        universe = null
     ) {
 
         console.log(
@@ -65,10 +61,26 @@ export class Observer {
         this.nebulaProvider =
             nebulaProvider;
 
+        this.universe =
+            universe;
+
 
         /*
          * =================================================
-         * OBSERVATION STATE
+         * DETECTOR
+         * =================================================
+         */
+
+        this.detector =
+            new ObservationDetector(
+                cameraController,
+                universe
+            );
+
+
+        /*
+         * =================================================
+         * STATE
          * =================================================
          */
 
@@ -81,43 +93,17 @@ export class Observer {
         this.failed =
             false;
 
-        this.ambient =
-            false;
 
+        this.observationStart =
+            0;
 
-        /*
-         * =================================================
-         * HOLD TIMER
-         * =================================================
-         */
 
         this.holdStart =
-            null;
+            0;
+
 
         this.holdDuration =
             this.getHoldDuration();
-
-
-        /*
-         * =================================================
-         * LAST RESULT
-         * =================================================
-         */
-
-        this.lastScore =
-            0;
-
-        this.lastDistanceScore =
-            0;
-
-        this.lastRotationScore =
-            0;
-
-        this.lastPositionScore =
-            0;
-
-        this.lastScaleScore =
-            0;
 
 
         /*
@@ -126,8 +112,11 @@ export class Observer {
          * =================================================
          */
 
-        this.lastDebugTime =
+        this.lastScore =
             0;
+
+        this.lastResult =
+            null;
 
 
         console.log(
@@ -143,12 +132,12 @@ export class Observer {
      */
 
     update(
-        now
+        now = performance.now()
     ) {
 
         /*
          * -------------------------------------------------
-         * Safety
+         * Already completed
          * -------------------------------------------------
          */
 
@@ -168,17 +157,27 @@ export class Observer {
                     false,
 
                 score:
+                    1,
+
+                progress:
                     1
             };
         }
 
 
+        /*
+         * -------------------------------------------------
+         * Major event lock
+         * -------------------------------------------------
+         */
+
         if (
-            this.ambient
+            STATE.observationEvent ||
+            STATE.observationLocked ||
+            STATE.controlsLocked
         ) {
 
             this.resetHold();
-
 
             return {
 
@@ -192,30 +191,9 @@ export class Observer {
                     false,
 
                 score:
-                    0
-            };
-        }
+                    0,
 
-
-        if (
-            STATE.ambient
-        ) {
-
-            this.resetHold();
-
-
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                observing:
-                    false,
-
-                score:
+                progress:
                     0
             };
         }
@@ -237,7 +215,6 @@ export class Observer {
 
             this.resetHold();
 
-
             return {
 
                 completed:
@@ -250,14 +227,18 @@ export class Observer {
                     false,
 
                 score:
+                    0,
+
+                progress:
                     0
             };
         }
 
 
         /*
-         * Observation only exists
-         * after summoning.
+         * -------------------------------------------------
+         * Stable only
+         * -------------------------------------------------
          */
 
         if (
@@ -267,7 +248,6 @@ export class Observer {
 
             this.resetHold();
 
-
             return {
 
                 completed:
@@ -280,6 +260,9 @@ export class Observer {
                     false,
 
                 score:
+                    0,
+
+                progress:
                     0
             };
         }
@@ -287,104 +270,49 @@ export class Observer {
 
         /*
          * -------------------------------------------------
-         * Camera
+         * Start timeout timer
          * -------------------------------------------------
          */
 
-        const cameraState =
-            this.getCameraState();
-
-
         if (
-            !cameraState
+            !this.started
         ) {
 
-            this.resetHold();
+            this.started =
+                true;
 
+            this.observationStart =
+                now;
 
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                observing:
-                    false,
-
-                score:
-                    0
-            };
+            STATE.observationStarted =
+                true;
         }
 
 
         /*
          * -------------------------------------------------
-         * Target
-         * -------------------------------------------------
-         */
-
-        const target =
-            nebula.observation;
-
-
-        if (
-            !target
-        ) {
-
-            this.resetHold();
-
-
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                    observing:
-                    false,
-
-                score:
-                    0
-            };
-        }
-
-
-        /*
-         * -------------------------------------------------
-         * SCORE
+         * Detector
          * -------------------------------------------------
          */
 
         const result =
-            this.calculateObservation(
-                cameraState,
-                target
-            );
+            this.detector.update();
 
 
         this.lastScore =
             result.score;
 
-        this.lastDistanceScore =
-            result.distanceScore;
+        this.lastResult =
+            result;
 
-        this.lastRotationScore =
-            result.rotationScore;
 
-        this.lastPositionScore =
-            result.positionScore;
-
-        this.lastScaleScore =
-            result.scaleScore;
+        nebula.observationScore =
+            result.score;
 
 
         /*
          * -------------------------------------------------
-         * OBSERVATION FOUND
+         * TARGET VALID
          * -------------------------------------------------
          */
 
@@ -394,7 +322,7 @@ export class Observer {
 
             if (
                 this.holdStart ===
-                null
+                0
             ) {
 
                 this.holdStart =
@@ -422,9 +350,9 @@ export class Observer {
                 );
 
 
-            /*
-             * Optional global observation progress.
-             */
+            nebula.observationHold =
+                held;
+
 
             STATE.observationProgress =
                 progress;
@@ -432,7 +360,7 @@ export class Observer {
 
             /*
              * -------------------------------------------------
-             * SUCCESS
+             * COMPLETE
              * -------------------------------------------------
              */
 
@@ -441,38 +369,10 @@ export class Observer {
                 this.holdDuration
             ) {
 
-                this.completed =
-                    true;
-
-                this.failed =
-                    false;
-
-                STATE.observationProgress =
-                    1;
-
-
-                console.log(
-                    "[Observer] OBSERVATION COMPLETE"
+                return this.complete(
+                    result,
+                    nebula
                 );
-
-
-                return {
-
-                    completed:
-                        true,
-
-                    failed:
-                        false,
-
-                    observing:
-                        true,
-
-                    score:
-                        result.score,
-
-                    progress:
-                        1
-                };
             }
 
 
@@ -504,14 +404,8 @@ export class Observer {
 
         if (
             this.holdStart !==
-            null
+            0
         ) {
-
-            this.holdStart =
-                null;
-
-            STATE.observationProgress =
-                0;
 
             console.log(
                 "[Observer] TARGET LOST"
@@ -519,17 +413,16 @@ export class Observer {
         }
 
 
+        this.resetHold();
+
+
         /*
          * -------------------------------------------------
-         * FAILURE TIMER
-         *
-         * Minimum 3 minutes.
-         * The actual timeout is configurable.
+         * TIMEOUT
          * -------------------------------------------------
          */
 
         if (
-            this.started &&
             this.hasObservationTimedOut(
                 now
             )
@@ -539,7 +432,11 @@ export class Observer {
                 true;
 
 
-            console.log(
+            STATE.observationProgress =
+                0;
+
+
+            console.warn(
                 "[Observer] OBSERVATION TIMEOUT"
             );
 
@@ -556,7 +453,10 @@ export class Observer {
                     false,
 
                 score:
-                    result.score
+                    result.score,
+
+                progress:
+                    0
             };
         }
 
@@ -573,618 +473,139 @@ export class Observer {
                 false,
 
             score:
-                result.score
+                result.score,
+
+            progress:
+                0
         };
     }
 
 
     /*
      * =====================================================
-     * CAMERA STATE
+     * COMPLETE
      * =====================================================
      */
 
-    getCameraState() {
-
-        const controller =
-            this.cameraController;
-
-
-        if (
-            !controller
-        ) {
-
-            return null;
-        }
-
-
-        /*
-         * Try common camera controller
-         * structures without forcing
-         * a specific implementation.
-         */
-
-        const camera =
-            controller.camera ||
-            controller;
-
-
-        if (
-            !camera
-        ) {
-
-            return null;
-        }
-
-
-        const position =
-            camera.position;
-
-
-        if (
-            !position
-        ) {
-
-            return null;
-        }
-
-
-        /*
-         * Camera rotation.
-         */
-
-        const rotation =
-            camera.rotation ||
-            null;
-
-
-        /*
-         * Scale.
-         *
-         * The observer primarily uses
-         * camera distance, but nebula
-         * scale is included in the target.
-         */
-
-        return {
-
-            position: {
-
-                x:
-                    Number(
-                        position.x
-                    ) || 0,
-
-                y:
-                    Number(
-                        position.y
-                    ) || 0,
-
-                z:
-                    Number(
-                        position.z
-                    ) || 0
-            },
-
-
-            rotation: {
-
-                x:
-                    Number(
-                        rotation?.x
-                    ) || 0,
-
-                y:
-                    Number(
-                        rotation?.y
-                    ) || 0,
-
-                z:
-                    Number(
-                        rotation?.z
-                    ) || 0
-            },
-
-
-            distance:
-                this.calculateDistance(
-                    position
-                )
-        };
-    }
-
-
-    /*
-     * =====================================================
-     * CALCULATE OBSERVATION
-     * =====================================================
-     */
-
-    calculateObservation(
-        camera,
-        target
+    complete(
+        result,
+        nebula
     ) {
 
+        if (
+            this.completed
+        ) {
+
+            return {
+
+                completed:
+                    false,
+
+                failed:
+                    false,
+
+                observing:
+                    false,
+
+                score:
+                    1,
+
+                progress:
+                    1
+            };
+        }
+
+
+        this.completed =
+            true;
+
+        this.failed =
+            false;
+
+
+        this.holdStart =
+            0;
+
+
+        STATE.observationProgress =
+            1;
+
+        STATE.observationComplete =
+            true;
+
+
+        if (
+            nebula
+        ) {
+
+            nebula.observationScore =
+                1;
+
+            nebula.observationHold =
+                this.holdDuration;
+        }
+
+
+        console.log(
+            "[Observer] OBSERVATION COMPLETE"
+        );
+
+
         /*
-         * =================================================
-         * TARGET ROTATION
-         * =================================================
-         */
-
-        const rotationScore =
-            this.rotationScore(
-                camera.rotation,
-                target
-            );
-
-
-        /*
-         * =================================================
-         * TARGET DISTANCE
-         * =================================================
-         */
-
-        const distanceScore =
-            this.distanceScore(
-                camera.distance,
-                target.distance
-            );
-
-
-        /*
-         * =================================================
-         * TARGET POSITION
-         * =================================================
-         */
-
-        const positionScore =
-            this.positionScore(
-                camera.position,
-                target.position
-            );
-
-
-        /*
-         * =================================================
-         * SCALE
-         * =================================================
+         * IMPORTANT
+         * -------------------------------------------------
+         * Observer does NOT directly execute the event.
          *
-         * Scale is mostly a property
-         * of the particle cloud.
+         * Universe is responsible for starting:
          *
-         * If camera controller exposes
-         * zoom/scale, use it.
+         * observation-event.js
          *
-         * Otherwise give a neutral score.
-         * =================================================
+         * If Universe exposes completeObservation(),
+         * request it here.
          */
 
-        const scaleScore =
-            this.scaleScore(
-                target
+        const universe =
+            this.universe;
+
+
+        if (
+            universe &&
+            typeof universe.completeObservation ===
+            "function"
+        ) {
+
+            Promise.resolve(
+                universe.completeObservation()
+            )
+            .catch(
+                error => {
+
+                    console.error(
+                        "[Observer] COMPLETE EVENT ERROR:",
+                        error
+                    );
+                }
             );
-
-
-        /*
-         * =================================================
-         * WEIGHTED SCORE
-         * =================================================
-         */
-
-        const score =
-
-            rotationScore * 0.40 +
-
-            distanceScore * 0.30 +
-
-            positionScore * 0.20 +
-
-            scaleScore * 0.10;
-
-
-        /*
-         * =================================================
-         * THRESHOLD
-         * =================================================
-         */
-
-        const threshold =
-            this.getSimilarityThreshold();
-
-
-        const valid =
-            score >= threshold &&
-            rotationScore >= 0.70 &&
-            distanceScore >= 0.70;
+        }
 
 
         return {
 
-            valid,
+            completed:
+                true,
 
-            score,
+            failed:
+                false,
 
-            rotationScore,
+            observing:
+                true,
 
-            distanceScore,
+            score:
+                result.score,
 
-            positionScore,
-
-            scaleScore
+            progress:
+                1
         };
-    }
-
-
-    /*
-     * =====================================================
-     * ROTATION SCORE
-     * =====================================================
-     */
-
-    rotationScore(
-        rotation,
-        target
-    ) {
-
-        if (
-            !rotation ||
-            !target
-        ) {
-
-            return 0;
-        }
-
-
-        const yaw =
-            this.angleDifference(
-                rotation.y,
-                target.yaw || 0
-            );
-
-
-        const pitch =
-            this.angleDifference(
-                rotation.x,
-                target.pitch || 0
-            );
-
-
-        const roll =
-            this.angleDifference(
-                rotation.z,
-                target.roll || 0
-            );
-
-
-        /*
-         * Allowed rotation error:
-         *
-         * approximately ±3~5%.
-         *
-         * Convert this into an angular
-         * tolerance while retaining
-         * usable gameplay.
-         */
-
-        const yawTolerance =
-            this.getRotationTolerance(
-                target.yaw
-            );
-
-
-        const pitchTolerance =
-            this.getRotationTolerance(
-                target.pitch
-            );
-
-
-        const rollTolerance =
-            this.getRotationTolerance(
-                target.roll
-            );
-
-
-        const yawScore =
-            this.errorScore(
-                yaw,
-                yawTolerance
-            );
-
-
-        const pitchScore =
-            this.errorScore(
-                pitch,
-                pitchTolerance
-            );
-
-
-        const rollScore =
-            this.errorScore(
-                roll,
-                rollTolerance
-            );
-
-
-        return (
-
-            yawScore * 0.45 +
-
-            pitchScore * 0.35 +
-
-            rollScore * 0.20
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * DISTANCE SCORE
-     * =====================================================
-     */
-
-    distanceScore(
-        current,
-        target
-    ) {
-
-        if (
-            !Number.isFinite(
-                current
-            ) ||
-            !Number.isFinite(
-                target
-            )
-        ) {
-
-            return 0;
-        }
-
-
-        const denominator =
-            Math.max(
-                0.001,
-                Math.abs(
-                    target
-                )
-            );
-
-
-        const error =
-            Math.abs(
-                current -
-                target
-            ) /
-            denominator;
-
-
-        /*
-         * User specification:
-         *
-         * approximately ±5~10%.
-         */
-
-        const tolerance =
-            this.getDistanceTolerance();
-
-
-        return this.errorScore(
-            error,
-            tolerance
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * POSITION SCORE
-     * =====================================================
-     */
-
-    positionScore(
-        position,
-        target
-    ) {
-
-        if (
-            !position ||
-            !target
-        ) {
-
-            return 0;
-        }
-
-
-        const dx =
-            position.x -
-            (target.x || 0);
-
-
-        const dy =
-            position.y -
-            (target.y || 0);
-
-
-        const dz =
-            position.z -
-            (target.z || 0);
-
-
-        const error =
-            Math.sqrt(
-                dx * dx +
-                dy * dy +
-                dz * dz
-            );
-
-
-        /*
-         * Position tolerance is relative
-         * to the observation distance.
-         */
-
-        const reference =
-            Math.max(
-                1,
-                Math.abs(
-                    target.distance ||
-                    100
-                )
-            );
-
-
-        const normalized =
-            error /
-            reference;
-
-
-        const tolerance =
-            this.getPositionTolerance();
-
-
-        return this.errorScore(
-            normalized,
-            tolerance
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * SCALE SCORE
-     * =====================================================
-     */
-
-    scaleScore(
-        target
-    ) {
-
-        /*
-         * The actual particle scale
-         * is controlled by the nebula.
-         *
-         * For now:
-         *
-         * if target.scale exists,
-         * it is considered valid.
-         *
-         * Camera zoom is primarily
-         * represented through distance.
-         */
-
-        if (
-            Number.isFinite(
-                target?.scale
-            )
-        ) {
-
-            return 1;
-        }
-
-
-        return 0.5;
-    }
-
-
-    /*
-     * =====================================================
-     * ERROR → SCORE
-     * =====================================================
-     */
-
-    errorScore(
-        error,
-        tolerance
-    ) {
-
-        if (
-            error <= 0
-        ) {
-
-            return 1;
-        }
-
-
-        if (
-            error >= tolerance
-        ) {
-
-            return 0;
-        }
-
-
-        return (
-            1 -
-            (
-                error /
-                tolerance
-            )
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * ANGLE DIFFERENCE
-     * =====================================================
-     */
-
-    angleDifference(
-        a,
-        b
-    ) {
-
-        let diff =
-            a -
-            b;
-
-
-        while (
-            diff >
-            Math.PI
-        ) {
-
-            diff -=
-                Math.PI * 2;
-        }
-
-
-        while (
-            diff <
-            -Math.PI
-        ) {
-
-            diff +=
-                Math.PI * 2;
-        }
-
-
-        return Math.abs(
-            diff
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * DISTANCE
-     * =====================================================
-     */
-
-    calculateDistance(
-        position
-    ) {
-
-        return Math.sqrt(
-
-            position.x *
-            position.x +
-
-            position.y *
-            position.y +
-
-            position.z *
-            position.z
-        );
     }
 
 
@@ -1197,7 +618,7 @@ export class Observer {
     reset() {
 
         this.started =
-            true;
+            false;
 
         this.completed =
             false;
@@ -1205,26 +626,31 @@ export class Observer {
         this.failed =
             false;
 
+        this.observationStart =
+            0;
+
         this.holdStart =
-            null;
+            0;
 
         this.lastScore =
             0;
 
-        this.lastDistanceScore =
-            0;
+        this.lastResult =
+            null;
 
-        this.lastRotationScore =
-            0;
 
-        this.lastPositionScore =
-            0;
+        STATE.observationStarted =
+            false;
 
-        this.lastScaleScore =
-            0;
+        STATE.observationComplete =
+            false;
 
         STATE.observationProgress =
             0;
+
+
+        this.detector.reset();
+
 
         console.log(
             "[Observer] RESET"
@@ -1234,24 +660,31 @@ export class Observer {
 
     /*
      * =====================================================
-     * HOLD RESET
+     * RESET HOLD
      * =====================================================
      */
 
     resetHold() {
 
-        if (
-            this.holdStart !==
-            null
-        ) {
-
-            this.holdStart =
-                null;
-        }
+        this.holdStart =
+            0;
 
 
         STATE.observationProgress =
             0;
+
+
+        const nebula =
+            this.getNebula();
+
+
+        if (
+            nebula
+        ) {
+
+            nebula.observationHold =
+                0;
+        }
     }
 
 
@@ -1288,118 +721,6 @@ export class Observer {
 
     /*
      * =====================================================
-     * CONFIG HELPERS
-     * =====================================================
-     */
-
-    getHoldDuration() {
-
-        const value =
-            CONFIG?.OBSERVATION
-                ?.HOLD_TIME;
-
-
-        if (
-            Number.isFinite(
-                value
-            )
-        ) {
-
-            return Math.max(
-                500,
-                value
-            );
-        }
-
-
-        /*
-         * Specification:
-         *
-         * approximately 2 seconds.
-         */
-
-        return 2000;
-    }
-
-
-    getSimilarityThreshold() {
-
-        const value =
-            CONFIG?.OBSERVATION
-                ?.SIMILARITY_THRESHOLD;
-
-
-        if (
-            Number.isFinite(
-                value
-            )
-        ) {
-
-            return Math.max(
-                0,
-                Math.min(
-                    1,
-                    value
-                )
-            );
-        }
-
-
-        /*
-         * Default:
-         * fairly strict observation.
-         */
-
-        return 0.86;
-    }
-
-
-    getRotationTolerance(
-        angle
-    ) {
-
-        /*
-         * Approximately 3~5%.
-         *
-         * Keep this intentionally
-         * forgiving enough for human
-         * mouse/touch movement.
-         */
-
-        const base =
-            Math.PI *
-            0.045;
-
-
-        return Math.max(
-            0.06,
-            base
-        );
-    }
-
-
-    getDistanceTolerance() {
-
-        /*
-         * 5~10%.
-         */
-
-        return 0.08;
-    }
-
-
-    getPositionTolerance() {
-
-        /*
-         * Approximately ±5%.
-         */
-
-        return 0.05;
-    }
-
-
-    /*
-     * =====================================================
      * TIMEOUT
      * =====================================================
      */
@@ -1407,25 +728,6 @@ export class Observer {
     hasObservationTimedOut(
         now
     ) {
-
-        /*
-         * Observation timeout begins
-         * from the first reset/start.
-         */
-
-        if (
-            !this.started
-        ) {
-
-            this.started =
-                true;
-
-            this.observationStart =
-                now;
-
-            return false;
-        }
-
 
         if (
             !this.observationStart
@@ -1451,19 +753,97 @@ export class Observer {
 
         const timeout =
             Math.max(
+
                 minimum,
+
                 Number.isFinite(
-                    configured
+                    Number(
+                        configured
+                    )
                 )
-                    ? configured
+                    ? Number(
+                        configured
+                    )
                     : minimum
             );
 
 
         return (
             now -
-            this.observationStart >=
-            timeout
-        );
+            this.observationStart
+        ) >=
+        timeout;
+    }
+
+
+    /*
+     * =====================================================
+     * HOLD DURATION
+     * =====================================================
+     */
+
+    getHoldDuration() {
+
+        const value =
+            CONFIG?.OBSERVATION
+                ?.HOLD_TIME;
+
+
+        if (
+            Number.isFinite(
+                Number(
+                    value
+                )
+            )
+        ) {
+
+            return Math.max(
+                500,
+                Number(
+                    value
+                )
+            );
+        }
+
+
+        return 2000;
+    }
+
+
+    /*
+     * =====================================================
+     * DEBUG
+     * =====================================================
+     */
+
+    getDebugState() {
+
+        return {
+
+            started:
+                this.started,
+
+            completed:
+                this.completed,
+
+            failed:
+                this.failed,
+
+            holdStart:
+                this.holdStart,
+
+            holdDuration:
+                this.holdDuration,
+
+            score:
+                this.lastScore,
+
+            result:
+                this.lastResult,
+
+            detector:
+                this.detector
+                    .getDebugState()
+        };
     }
 }
