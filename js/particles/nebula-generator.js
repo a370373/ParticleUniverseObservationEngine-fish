@@ -15,33 +15,16 @@
  *
  * IMPORTANT
  * ---------------------------------------------------------
- * This module generates nebula DATA only.
+ * DATA GENERATOR ONLY
  *
- * It does NOT:
- *
+ * This module does NOT:
  * - render particles
  * - create THREE.Points
  * - control Camera
- * - determine observation success
  * - run observation events
+ * - play intro animation
  *
- * The image is NOT stored as a visible object.
- *
- * The image becomes:
- *
- *     particle color
- *     particle spatial arrangement
- *     hidden projection structure
- *
- * Therefore:
- *
- *     correct observation angle
- *              ↓
- *       particle projection
- *              ↓
- *          image appears
- *
- * Side / back views remain a particle cloud.
+ * CameraController is completely independent.
  * =========================================================
  */
 
@@ -76,17 +59,14 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * IMAGE
+     * LOAD IMAGE
      * =====================================================
      */
 
-    let image =
-        null;
+    let image = null;
 
 
-    if (
-        imageSource
-    ) {
+    if (imageSource) {
 
         try {
 
@@ -95,29 +75,25 @@ export async function generateNebula(
                     imageSource
                 );
 
-
             console.log(
                 "[NebulaGenerator] IMAGE LOADED"
             );
 
-        } catch (
-            error
-        ) {
+        } catch (error) {
 
             console.warn(
                 "[NebulaGenerator] IMAGE LOAD FAILED:",
                 error
             );
 
-            image =
-                null;
+            image = null;
         }
     }
 
 
     /*
      * =====================================================
-     * SAMPLE IMAGE
+     * SAMPLE SIZE
      * =====================================================
      */
 
@@ -177,36 +153,25 @@ export async function generateNebula(
             count * 3
         );
 
-
     const colors =
         new Float32Array(
             count * 3
         );
-
 
     const sizes =
         new Float32Array(
             count
         );
 
-
     const drift =
         new Float32Array(
             count * 3
         );
 
-
     const phase =
         new Float32Array(
             count
         );
-
-
-    /*
-     * target is intentionally retained
-     * for compatibility with the existing
-     * ParticleSystem / Universe architecture.
-     */
 
     const target =
         new Float32Array(
@@ -216,23 +181,8 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * IMAGE PROJECTION PARAMETERS
+     * PROJECTION
      * =====================================================
-     *
-     * The image itself is never rendered.
-     *
-     * Each sampled pixel becomes a point
-     * around an invisible projection plane.
-     *
-     * Depth is introduced according to:
-     *
-     *     pixel luminance
-     *     organic noise
-     *     particle layer
-     *     random variation
-     *
-     * This prevents the side view from looking
-     * like a flat billboard.
      */
 
     const projection =
@@ -241,7 +191,7 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * GENERATION
+     * GENERATE
      * =====================================================
      */
 
@@ -273,10 +223,8 @@ export async function generateNebula(
         let r =
             pixel.r;
 
-
         let g =
             pixel.g;
-
 
         let b =
             pixel.b;
@@ -292,13 +240,12 @@ export async function generateNebula(
 
         /*
          * -------------------------------------------------
-         * IMAGE COORDINATE
+         * IMAGE COORDINATES
          * -------------------------------------------------
          */
 
         const imageX =
             pixel.x;
-
 
         const imageY =
             pixel.y;
@@ -306,14 +253,13 @@ export async function generateNebula(
 
         /*
          * -------------------------------------------------
-         * BASE IMAGE PLANE
+         * IMAGE PLANE
          * -------------------------------------------------
          */
 
         const x =
             imageX *
             projection.width;
-
 
         const y =
             imageY *
@@ -322,15 +268,8 @@ export async function generateNebula(
 
         /*
          * -------------------------------------------------
-         * DEPTH
+         * VOLUMETRIC DEPTH
          * -------------------------------------------------
-         *
-         * The hidden image is distributed
-         * through multiple particle layers.
-         *
-         * This is what makes the object a
-         * volumetric particle cosmos instead
-         * of a flat picture.
          */
 
         const depthNoise =
@@ -404,11 +343,9 @@ export async function generateNebula(
             x +
             organicX;
 
-
         let finalY =
             y +
             organicY;
-
 
         let finalZ =
             z +
@@ -419,16 +356,6 @@ export async function generateNebula(
          * -------------------------------------------------
          * OUTER PARTICLE FIELD
          * -------------------------------------------------
-         *
-         * Some particles are deliberately
-         * pushed away from the image core.
-         *
-         * They form the surrounding nebula.
-         *
-         * The image remains recoverable from
-         * the correct observation direction,
-         * but the side view becomes much more
-         * cosmic and less obviously pictorial.
          */
 
         if (
@@ -456,11 +383,9 @@ export async function generateNebula(
                 radial.x *
                 outerDistance;
 
-
             finalY +=
                 radial.y *
                 outerDistance;
-
 
             finalZ +=
                 radial.z *
@@ -470,17 +395,15 @@ export async function generateNebula(
 
         /*
          * -------------------------------------------------
-         * STORE POSITION
+         * POSITION
          * -------------------------------------------------
          */
 
         positions[n] =
             finalX;
 
-
         positions[n + 1] =
             finalY;
-
 
         positions[n + 2] =
             finalZ;
@@ -489,10 +412,8 @@ export async function generateNebula(
         target[n] =
             finalX;
 
-
         target[n + 1] =
             finalY;
-
 
         target[n + 2] =
             finalZ;
@@ -500,14 +421,30 @@ export async function generateNebula(
 
         /*
          * -------------------------------------------------
-         * COLOR
+         * ALPHA / BRIGHTNESS
          * -------------------------------------------------
          */
 
+        const alpha =
+            Number.isFinite(
+                pixel.alpha
+            )
+                ? pixel.alpha
+                : 1;
+
+
+        if (
+            alpha <= 0.01
+        ) {
+
+            r *= 0.15;
+            g *= 0.15;
+            b *= 0.15;
+        }
+
+
         /*
-         * Slightly lift very dark pixels.
-         * This prevents completely invisible
-         * particles inside the universe.
+         * Lift extremely dark particles.
          */
 
         if (
@@ -526,13 +463,11 @@ export async function generateNebula(
                     r + lift
                 );
 
-
             g =
                 Math.min(
                     1,
                     g + lift
                 );
-
 
             b =
                 Math.min(
@@ -543,7 +478,9 @@ export async function generateNebula(
 
 
         /*
-         * Tiny natural color variation.
+         * -------------------------------------------------
+         * COLOR VARIATION
+         * -------------------------------------------------
          */
 
         const colorVariation =
@@ -561,14 +498,12 @@ export async function generateNebula(
                 1
             );
 
-
         g =
             clamp(
                 g + colorVariation,
                 0,
                 1
             );
-
 
         b =
             clamp(
@@ -581,10 +516,8 @@ export async function generateNebula(
         colors[n] =
             r;
 
-
         colors[n + 1] =
             g;
-
 
         colors[n + 2] =
             b;
@@ -592,7 +525,7 @@ export async function generateNebula(
 
         /*
          * -------------------------------------------------
-         * PARTICLE SIZE
+         * SIZE
          * -------------------------------------------------
          */
 
@@ -613,11 +546,6 @@ export async function generateNebula(
                 ) || 5
             );
 
-
-        /*
-         * Brighter image regions receive
-         * slightly more visual presence.
-         */
 
         const brightnessFactor =
             0.65 +
@@ -641,11 +569,6 @@ export async function generateNebula(
          * -------------------------------------------------
          * DRIFT
          * -------------------------------------------------
-         *
-         * Very small movement.
-         *
-         * This keeps the nebula alive without
-         * destroying the hidden image structure.
          */
 
         const driftStrength =
@@ -685,7 +608,7 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * HIDDEN OBSERVATION PARAMETERS
+     * OBSERVATION
      * =====================================================
      */
 
@@ -698,15 +621,11 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * NEBULA
+     * RESULT
      * =====================================================
      */
 
     const nebula = {
-
-        /*
-         * Particle data
-         */
 
         positions,
 
@@ -722,60 +641,35 @@ export async function generateNebula(
 
         count,
 
-
-        /*
-         * Observation
-         */
-
         observation,
-
-
-        /*
-         * Runtime
-         */
 
         birthTime:
             getNow(),
 
+        /*
+         * IMPORTANT
+         *
+         * ParticleSystem will use this
+         * state for the opening animation.
+         */
 
         state:
             "SUMMONING",
 
-
         rotationMode:
             randomRotationMode(),
-
 
         velocity:
             new THREE.Vector3(),
 
-
         center:
             new THREE.Vector3(),
-
-
-        /*
-         * Image identity
-         */
 
         originalImageId:
             imageSource || null,
 
-
         imageSource:
             imageSource || null,
-
-
-        /*
-         * Internal metadata
-         *
-         * These values are NOT used by
-         * the renderer directly.
-         *
-         * They allow future observation
-         * projection / regeneration modules
-         * to understand the generated nebula.
-         */
 
         projection: {
 
@@ -796,12 +690,6 @@ export async function generateNebula(
     };
 
 
-    /*
-     * =====================================================
-     * COMPLETE
-     * =====================================================
-     */
-
     console.log(
         "[NebulaGenerator] COMPLETE:",
         count,
@@ -813,6 +701,48 @@ export async function generateNebula(
 
 
     return nebula;
+}
+
+
+/*
+ * =========================================================
+ * IMAGE LOADER
+ * =========================================================
+ */
+
+function loadImage(
+    source
+) {
+
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
+
+            const image =
+                new Image();
+
+            image.onload =
+                () => resolve(
+                    image
+                );
+
+            image.onerror =
+                () => reject(
+                    new Error(
+                        "Image loading failed."
+                    )
+                );
+
+            /*
+             * Base64 / data URLs work directly.
+             */
+
+            image.src =
+                source;
+        }
+    );
 }
 
 
@@ -836,7 +766,6 @@ function sampleImage(
     canvas.width =
         size;
 
-
     canvas.height =
         size;
 
@@ -851,18 +780,11 @@ function sampleImage(
         );
 
 
-    if (
-        !context
-    ) {
+    if (!context) {
 
         return null;
     }
 
-
-    /*
-     * Preserve image aspect ratio
-     * while fitting into the sampling area.
-     */
 
     const sourceWidth =
         Math.max(
@@ -894,14 +816,11 @@ function sampleImage(
     let drawWidth =
         size;
 
-
     let drawHeight =
         size;
 
-
     let offsetX =
         0;
-
 
     let offsetY =
         0;
@@ -915,11 +834,9 @@ function sampleImage(
         drawHeight =
             size;
 
-
         drawWidth =
             size *
             sourceRatio;
-
 
         offsetX =
             (
@@ -933,11 +850,9 @@ function sampleImage(
         drawWidth =
             size;
 
-
         drawHeight =
             size /
             sourceRatio;
-
 
         offsetY =
             (
@@ -947,11 +862,6 @@ function sampleImage(
             0.5;
     }
 
-
-    /*
-     * Black background ensures transparent
-     * image areas become empty/dark particles.
-     */
 
     context.clearRect(
         0,
@@ -983,15 +893,12 @@ function sampleImage(
                 size
             ).data;
 
-    } catch (
-        error
-    ) {
+    } catch (error) {
 
         console.warn(
             "[NebulaGenerator] IMAGE DATA FAILED:",
             error
         );
-
 
         return null;
     }
@@ -1006,7 +913,7 @@ function sampleImage(
 
 /*
  * =========================================================
- * PIXEL
+ * SAMPLE PIXEL
  * =========================================================
  */
 
@@ -1049,16 +956,6 @@ function samplePixel(
         255;
 
 
-    /*
-     * Coordinates:
-     *
-     * x: -0.5 → +0.5
-     * y: +0.5 → -0.5
-     *
-     * Y is flipped because image
-     * coordinates grow downward.
-     */
-
     return {
 
         x:
@@ -1068,8 +965,7 @@ function samplePixel(
                     1,
                     size - 1
                 )
-            )
-            -
+            ) -
             0.5,
 
         y:
@@ -1109,8 +1005,6 @@ function samplePixel(
  * =========================================================
  * PROCEDURAL PIXEL
  * =========================================================
- *
- * Used when no image is available.
  */
 
 function createProceduralPixel() {
@@ -1180,193 +1074,96 @@ function createProceduralPixel() {
 
 function createProjectionParameters() {
 
-    const nebulaConfig =
+    const config =
         CONFIG?.NEBULA || {};
 
 
     return {
 
-        /*
-         * Main hidden image plane.
-         */
-
         width:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.PROJECTION_WIDTH
-                )
-            )
-                ? Number(
-                    nebulaConfig.PROJECTION_WIDTH
-                )
-                : 110,
-
+            finiteOr(
+                config.PROJECTION_WIDTH,
+                110
+            ),
 
         height:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.PROJECTION_HEIGHT
-                )
-            )
-                ? Number(
-                    nebulaConfig.PROJECTION_HEIGHT
-                )
-                : 82,
-
-
-        /*
-         * Volumetric depth.
-         */
+            finiteOr(
+                config.PROJECTION_HEIGHT,
+                82
+            ),
 
         depth:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.PROJECTION_DEPTH
-                )
-            )
-                ? Number(
-                    nebulaConfig.PROJECTION_DEPTH
-                )
-                : 26,
-
+            finiteOr(
+                config.PROJECTION_DEPTH,
+                26
+            ),
 
         noiseDepth:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.NOISE_DEPTH
-                )
-            )
-                ? Number(
-                    nebulaConfig.NOISE_DEPTH
-                )
-                : 13,
-
+            finiteOr(
+                config.NOISE_DEPTH,
+                13
+            ),
 
         brightnessDepth:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.BRIGHTNESS_DEPTH
-                )
-            )
-                ? Number(
-                    nebulaConfig.BRIGHTNESS_DEPTH
-                )
-                : 8,
-
-
-        /*
-         * Organic structure.
-         */
+            finiteOr(
+                config.BRIGHTNESS_DEPTH,
+                8
+            ),
 
         organic:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.ORGANIC_DISTORTION
-                )
-            )
-                ? Number(
-                    nebulaConfig.ORGANIC_DISTORTION
-                )
-                : 5,
-
+            finiteOr(
+                config.ORGANIC_DISTORTION,
+                5
+            ),
 
         organicDepth:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.ORGANIC_DEPTH
-                )
-            )
-                ? Number(
-                    nebulaConfig.ORGANIC_DEPTH
-                )
-                : 7,
-
-
-        /*
-         * Outer universe particles.
-         */
+            finiteOr(
+                config.ORGANIC_DEPTH,
+                7
+            ),
 
         outerParticleRatio:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.OUTER_PARTICLE_RATIO
-                )
-            )
-                ? Number(
-                    nebulaConfig.OUTER_PARTICLE_RATIO
-                )
-                : 0.18,
-
+            finiteOr(
+                config.OUTER_PARTICLE_RATIO,
+                0.18
+            ),
 
         outerDistanceMin:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.OUTER_DISTANCE_MIN
-                )
-            )
-                ? Number(
-                    nebulaConfig.OUTER_DISTANCE_MIN
-                )
-                : 8,
-
+            finiteOr(
+                config.OUTER_DISTANCE_MIN,
+                8
+            ),
 
         outerDistanceMax:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.OUTER_DISTANCE_MAX
-                )
-            )
-                ? Number(
-                    nebulaConfig.OUTER_DISTANCE_MAX
-                )
-                : 30,
-
-
-        /*
-         * Visual life.
-         */
+            finiteOr(
+                config.OUTER_DISTANCE_MAX,
+                30
+            ),
 
         drift:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.DRIFT
-                )
-            )
-                ? Number(
-                    nebulaConfig.DRIFT
-                )
-                : 0.012,
-
+            finiteOr(
+                config.DRIFT,
+                0.012
+            ),
 
         colorVariation:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.COLOR_VARIATION
-                )
-            )
-                ? Number(
-                    nebulaConfig.COLOR_VARIATION
-                )
-                : 0.025,
-
+            finiteOr(
+                config.COLOR_VARIATION,
+                0.025
+            ),
 
         minimumBrightness:
-            Number.isFinite(
-                Number(
-                    nebulaConfig.MINIMUM_BRIGHTNESS
-                )
+            finiteOr(
+                config.MINIMUM_BRIGHTNESS,
+                0.045
             )
-                ? Number(
-                    nebulaConfig.MINIMUM_BRIGHTNESS
-                )
-                : 0.045
     };
 }
 
 
 /*
  * =========================================================
- * OBSERVATION PARAMETERS
+ * OBSERVATION
  * =========================================================
  */
 
@@ -1375,22 +1172,7 @@ function createObservation(
     projection
 ) {
 
-    const distance =
-        randomRange(
-            0.90,
-            1.10
-        ) *
-        110;
-
-
     return {
-
-        /*
-         * Hidden camera orientation.
-         *
-         * This is deliberately generated
-         * independently for every nebula.
-         */
 
         yaw:
             randomRange(
@@ -1398,13 +1180,11 @@ function createObservation(
                 Math.PI
             ),
 
-
         pitch:
             randomRange(
                 -Math.PI * 0.45,
                 Math.PI * 0.45
             ),
-
 
         roll:
             randomRange(
@@ -1412,52 +1192,25 @@ function createObservation(
                 Math.PI
             ),
 
-
-        /*
-         * Hidden observation distance.
-         */
-
-        distance,
-
-
-        /*
-         * Hidden observation position.
-         *
-         * Keep this relative to the nebula center.
-         */
+        distance:
+            randomRange(
+                0.90,
+                1.10
+            ) *
+            110,
 
         position:
             new THREE.Vector3(
-                randomRange(
-                    -8,
-                    8
-                ),
-                randomRange(
-                    -8,
-                    8
-                ),
-                randomRange(
-                    -8,
-                    8
-                )
+                randomRange(-8, 8),
+                randomRange(-8, 8),
+                randomRange(-8, 8)
             ),
-
-
-        /*
-         * Hidden scale.
-         */
 
         scale:
             randomRange(
                 0.92,
                 1.08
             ),
-
-
-        /*
-         * Tolerances follow the
-         * product specification.
-         */
 
         tolerance: {
 
@@ -1467,17 +1220,14 @@ function createObservation(
                     0.05
                 ),
 
-
             distance:
                 randomRange(
                     0.05,
                     0.10
                 ),
 
-
             position:
                 0.05,
-
 
             scale:
                 randomRange(
@@ -1486,21 +1236,10 @@ function createObservation(
                 )
         },
 
-
-        /*
-         * Similarity threshold.
-         */
-
         similarityThreshold:
             Number(
                 CONFIG?.OBSERVATION?.SIMILARITY_THRESHOLD
             ) || 0.85,
-
-
-        /*
-         * Metadata for future
-         * projection comparison.
-         */
 
         projection: {
 
@@ -1528,11 +1267,8 @@ function randomRotationMode() {
     const modes = [
 
         "ROTATE",
-
         "FLIP",
-
         "STOP",
-
         "DEFORM"
 
     ];
@@ -1556,21 +1292,13 @@ function randomRotationMode() {
 function randomDirection() {
 
     let x =
-        Math.random() *
-        2 -
-        1;
-
+        Math.random() * 2 - 1;
 
     let y =
-        Math.random() *
-        2 -
-        1;
-
+        Math.random() * 2 - 1;
 
     let z =
-        Math.random() *
-        2 -
-        1;
+        Math.random() * 2 - 1;
 
 
     const length =
@@ -1581,32 +1309,23 @@ function randomDirection() {
         ) || 1;
 
 
-    x /=
-        length;
-
-
-    y /=
-        length;
-
-
-    z /=
-        length;
-
-
     return {
 
-        x,
+        x:
+            x / length,
 
-        y,
+        y:
+            y / length,
 
-        z
+        z:
+            z / length
     };
 }
 
 
 /*
  * =========================================================
- * PROCEDURAL NOISE
+ * NOISE
  * =========================================================
  */
 
@@ -1655,6 +1374,29 @@ function randomRange(
             a
         )
     );
+}
+
+
+/*
+ * =========================================================
+ * FINITE VALUE
+ * =========================================================
+ */
+
+function finiteOr(
+    value,
+    fallback
+) {
+
+    const number =
+        Number(value);
+
+
+    return Number.isFinite(
+        number
+    )
+        ? number
+        : fallback;
 }
 
 
