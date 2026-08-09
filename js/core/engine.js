@@ -1,5 +1,6 @@
 /*
  * =========================================================
+ * PARTICLE UNIVERSE
  * ENGINE
  * FULL RUNTIME
  * =========================================================
@@ -14,6 +15,10 @@ import {
     AmbientController,
     shouldEnterAmbient
 } from "../universe/ambient.js";
+
+import {
+    ObservationDetector
+} from "../observation/observation-detector.js";
 
 
 export class Engine {
@@ -55,11 +60,36 @@ export class Engine {
             roaming;
 
 
+        /*
+         * =================================================
+         * AMBIENT
+         * =================================================
+         */
+
         this.ambient =
             new AmbientController(
                 cameraController
             );
 
+
+        /*
+         * =================================================
+         * OBSERVATION DETECTOR
+         * =================================================
+         */
+
+        this.observationDetector =
+            new ObservationDetector(
+                cameraController,
+                universe
+            );
+
+
+        /*
+         * =================================================
+         * RUNTIME
+         * =================================================
+         */
 
         this.running =
             false;
@@ -67,6 +97,11 @@ export class Engine {
 
         this.last =
             performance.now();
+
+
+        console.log(
+            "[Engine] OBSERVATION DETECTOR READY"
+        );
 
 
         console.log(
@@ -86,10 +121,6 @@ export class Engine {
         if (
             this.running
         ) {
-
-            console.log(
-                "[Engine] ALREADY RUNNING"
-            );
 
             return;
         }
@@ -135,8 +166,13 @@ export class Engine {
         const dt =
             Math.min(
                 0.05,
-                (now - this.last) /
-                1000
+                Math.max(
+                    0,
+                    (
+                        now -
+                        this.last
+                    ) / 1000
+                )
             );
 
 
@@ -159,7 +195,7 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] STATE ERROR:",
+                "[Engine] updateIdle error:",
                 error
             );
         }
@@ -167,7 +203,7 @@ export class Engine {
 
         /*
          * =================================================
-         * CAMERA / AMBIENT
+         * CAMERA
          * =================================================
          */
 
@@ -191,7 +227,7 @@ export class Engine {
                             true;
 
                         console.log(
-                            "[Engine] AMBIENT ENTER"
+                            "[Engine] AMBIENT MODE"
                         );
                     }
                 }
@@ -202,9 +238,18 @@ export class Engine {
                 );
 
 
-                this.cameraController.update(
-                    dt
-                );
+                if (
+                    this.cameraController &&
+                    typeof this.cameraController
+                        .update ===
+                    "function"
+                ) {
+
+                    this.cameraController
+                        .update(
+                            dt
+                        );
+                }
             }
 
         } catch (error) {
@@ -225,7 +270,9 @@ export class Engine {
         try {
 
             if (
-                this.universe
+                this.universe &&
+                typeof this.universe.update ===
+                "function"
             ) {
 
                 this.universe.update(
@@ -245,6 +292,39 @@ export class Engine {
 
         /*
          * =================================================
+         * OBSERVATION
+         *
+         * Must run AFTER Universe update
+         * and AFTER Camera update.
+         * =================================================
+         */
+
+        try {
+
+            if (
+                this.observationDetector
+            ) {
+
+                this.syncObservationTarget();
+
+
+                this.observationDetector
+                    .update(
+                        now
+                    );
+            }
+
+        } catch (error) {
+
+            console.error(
+                "[Engine] OBSERVATION ERROR:",
+                error
+            );
+        }
+
+
+        /*
+         * =================================================
          * ROAMING
          * =================================================
          */
@@ -252,7 +332,9 @@ export class Engine {
         try {
 
             if (
-                this.roaming
+                this.roaming &&
+                typeof this.roaming.update ===
+                "function"
             ) {
 
                 this.roaming.update(
@@ -264,78 +346,6 @@ export class Engine {
 
             console.error(
                 "[Engine] ROAMING ERROR:",
-                error
-            );
-        }
-
-
-        /*
-         * =================================================
-         * OBSERVER
-         * =================================================
-         *
-         * Observation is only evaluated when:
-         *
-         * 1. not ambient
-         * 2. not locked
-         * 3. not already complete
-         * 4. not shuffling
-         */
-
-        try {
-
-            if (
-                this.observer &&
-                this.universe &&
-                !STATE.ambient &&
-                !STATE.observationLocked &&
-                !STATE.observationComplete &&
-                !STATE.shuffle
-            ) {
-
-                this.observer.ambient =
-                    false;
-
-
-                const result =
-                    this.observer.update(
-                        now
-                    );
-
-
-                if (
-                    result.completed
-                ) {
-
-                    console.log(
-                        "[Engine] OBSERVATION DETECTED:",
-                        result.score
-                    );
-
-
-                    this.universe
-                        .completeObservation();
-
-
-                } else if (
-                    result.failed
-                ) {
-
-                    console.log(
-                        "[Engine] OBSERVATION FAILED:",
-                        result.score
-                    );
-
-
-                    this.universe
-                        .shuffle();
-                }
-            }
-
-        } catch (error) {
-
-            console.error(
-                "[Engine] OBSERVER ERROR:",
                 error
             );
         }
@@ -384,11 +394,79 @@ export class Engine {
 
     /*
      * =====================================================
+     * SYNC OBSERVATION TARGET
+     * =====================================================
+     *
+     * Universe creates a new nebula.
+     *
+     * Engine detects that change and attaches
+     * the detector exactly once.
+     *
+     * This avoids modifying the Universe runtime
+     * unnecessarily.
+     * =====================================================
+     */
+
+    syncObservationTarget() {
+
+        if (
+            !this.universe ||
+            !this.observationDetector
+        ) {
+
+            return;
+        }
+
+
+        const nebula =
+            this.universe.nebula;
+
+
+        if (
+            !nebula
+        ) {
+
+            return;
+        }
+
+
+        if (
+            this.observationDetector
+                .currentNebula ===
+            nebula
+        ) {
+
+            return;
+        }
+
+
+        console.log(
+            "[Engine] NEW OBSERVATION TARGET"
+        );
+
+
+        this.observationDetector
+            .attach(
+                nebula
+            );
+    }
+
+
+    /*
+     * =====================================================
      * STOP
      * =====================================================
      */
 
     stop() {
+
+        if (
+            !this.running
+        ) {
+
+            return;
+        }
+
 
         this.running =
             false;
