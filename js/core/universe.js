@@ -1,40 +1,34 @@
-console.log(
-    "🔥🔥🔥 UNIVERSE.JS VERSION 20260809"
-);
-
-import {
-    generateNebula
-} from "../particles/nebula-generator.js";
-
-import {
-    ParticleSystem
-} from "../particles/particle-system.js";
-
-import {
-    createStars,
-    createDust
-} from "../universe/stars.js";
-
-import {
-    getRandomImage
-} from "../media/image-library.js";
-
-import {
-    STATE,
-    setPhase
-} from "./state.js";
-
-import {
-    CONFIG
-} from "../config.js";
-
-import {
-    runObservationEvent
-} from "../observation/observation-event.js";
-
-import {
-    shuffleParticles
-} from "../particles/particle-shuffle.js";
+/*
+ * =========================================================
+ * PARTICLE UNIVERSE — MINIMAL VISUAL TEST
+ * =========================================================
+ *
+ * 目的：
+ * 先確認：
+ *
+ * THREE
+ *   ↓
+ * Scene
+ *   ↓
+ * Camera
+ *   ↓
+ * Points
+ *   ↓
+ * Renderer
+ *
+ * 整條渲染管線正常。
+ *
+ * 暫時不使用：
+ * - nebula-generator
+ * - Base64 image
+ * - ParticleSystem
+ * - Observer
+ * - Roaming
+ * - Shuffle
+ * - Observation
+ *
+ * =========================================================
+ */
 
 
 export class Universe {
@@ -45,10 +39,6 @@ export class Universe {
         cameraController
     ) {
 
-        console.log(
-            "[Universe] CONSTRUCTOR"
-        );
-
         this.THREE =
             THREE;
 
@@ -58,634 +48,394 @@ export class Universe {
         this.camera =
             cameraController;
 
-        this.particleSystem =
-            null;
-
-        this.nebula =
-            null;
-
         this.stars =
             null;
 
         this.dust =
             null;
 
-        this.cycleId =
-            0;
-
-        this.summonTimer =
+        this.nebula =
             null;
 
-        this.summonDuration =
-            6500;
+        this.particleSystem =
+            null;
 
         this.ready =
             false;
 
-        try {
 
-            console.log(
-                "[Universe] CREATING STARS"
-            );
+        /*
+         * =================================================
+         * CREATE STAR FIELD
+         * =================================================
+         */
 
-            this.stars =
-                createStars(
-                    THREE,
-                    CONFIG.PARTICLES.STARS
-                );
-
-            console.log(
-                "[Universe] STARS CREATED"
-            );
+        this.createStarField();
 
 
-            console.log(
-                "[Universe] CREATING DUST"
-            );
+        /*
+         * =================================================
+         * CREATE DUST
+         * =================================================
+         */
 
-            this.dust =
-                createDust(
-                    THREE,
-                    CONFIG.PARTICLES.DUST
-                );
-
-            console.log(
-                "[Universe] DUST CREATED"
-            );
+        this.createDust();
 
 
-            scene.add(
-                this.stars
-            );
-
-            scene.add(
-                this.dust
-            );
-
-            console.log(
-                "[Universe] BACKGROUND ADDED"
-            );
-
-        } catch (error) {
-
-            console.error(
-                "[Universe] BACKGROUND ERROR:",
-                error
-            );
-
-            this.showError(
-                error
-            );
-
-            return;
-        }
-
+        /*
+         * =================================================
+         * READY
+         * =================================================
+         */
 
         this.ready =
             true;
 
+
         console.log(
-            "[Universe] READY"
+            "[Universe] MINIMAL UNIVERSE READY"
         );
-
-
-        this.startNewCycle()
-            .catch(
-                error => {
-
-                    console.error(
-                        "[Universe] FIRST CYCLE ERROR:",
-                        error
-                    );
-
-                    this.showError(
-                        error
-                    );
-                }
-            );
     }
 
 
-    async startNewCycle() {
+    /*
+     * =====================================================
+     * STAR FIELD
+     * =====================================================
+     */
 
-        console.log(
-            "[Universe] START NEW CYCLE"
-        );
+    createStarField() {
+
+        const THREE =
+            this.THREE;
 
 
-        if (
-            !this.ready
+        const count =
+            5000;
+
+
+        const geometry =
+            new THREE.BufferGeometry();
+
+
+        const positions =
+            new Float32Array(
+                count * 3
+            );
+
+
+        const colors =
+            new Float32Array(
+                count * 3
+            );
+
+
+        for (
+            let i = 0;
+            i < count;
+            i++
         ) {
 
-            console.warn(
-                "[Universe] NOT READY"
-            );
-
-            return;
-        }
+            const index =
+                i * 3;
 
 
-        const currentCycle =
-            ++this.cycleId;
+            /*
+             * Large spherical universe
+             */
+
+            const radius =
+                200 +
+                Math.random() * 1800;
 
 
-        if (
-            this.summonTimer
-        ) {
-
-            clearTimeout(
-                this.summonTimer
-            );
-
-            this.summonTimer =
-                null;
-        }
+            const theta =
+                Math.random() *
+                Math.PI *
+                2;
 
 
-        setPhase(
-            "SUMMONING"
-        );
-
-
-        console.log(
-            "[Universe] GET RANDOM IMAGE"
-        );
-
-
-        let source;
-
-        try {
-
-            source =
-                getRandomImage();
-
-        } catch (error) {
-
-            console.error(
-                "[Universe] IMAGE LIBRARY ERROR:",
-                error
-            );
-
-            this.showError(
-                error
-            );
-
-            return;
-        }
-
-
-        if (
-            !source
-        ) {
-
-            console.error(
-                "[Universe] NO IMAGE"
-            );
-
-            this.showError(
-                new Error(
-                    "getRandomImage() returned nothing."
-                )
-            );
-
-            return;
-        }
-
-
-        console.log(
-            "[Universe] IMAGE FOUND"
-        );
-
-
-        console.log(
-            "[Universe] GENERATING NEBULA"
-        );
-
-
-        let nebula;
-
-        try {
-
-            nebula =
-                await generateNebula(
-                    this.THREE,
-                    source
+            const phi =
+                Math.acos(
+                    Math.random() * 2 - 1
                 );
 
-        } catch (error) {
 
-            console.error(
-                "[Universe] NEBULA ERROR:",
-                error
-            );
+            positions[index] =
+                radius *
+                Math.sin(phi) *
+                Math.cos(theta);
 
-            this.showError(
-                error
-            );
 
-            return;
+            positions[index + 1] =
+                radius *
+                Math.sin(phi) *
+                Math.sin(theta);
+
+
+            positions[index + 2] =
+                radius *
+                Math.cos(phi);
+
+
+            /*
+             * Slightly varied brightness
+             */
+
+            const brightness =
+                0.35 +
+                Math.random() *
+                0.65;
+
+
+            colors[index] =
+                brightness;
+
+
+            colors[index + 1] =
+                brightness;
+
+
+            colors[index + 2] =
+                brightness;
         }
 
 
-        console.log(
-            "[Universe] NEBULA GENERATED"
+        geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(
+                positions,
+                3
+            )
         );
 
 
-        if (
-            currentCycle !==
-            this.cycleId
-        ) {
-
-            console.log(
-                "[Universe] OLD CYCLE IGNORED"
-            );
-
-            return;
-        }
-
-
-        if (
-            !nebula
-        ) {
-
-            this.showError(
-                new Error(
-                    "generateNebula() returned null."
-                )
-            );
-
-            return;
-        }
-
-
-        this.nebula =
-            nebula;
-
-
-        this.disposeParticleSystem();
-
-
-        console.log(
-            "[Universe] CREATING PARTICLE SYSTEM"
+        geometry.setAttribute(
+            "color",
+            new THREE.BufferAttribute(
+                colors,
+                3
+            )
         );
 
 
-        try {
+        const material =
+            new THREE.PointsMaterial({
 
-            this.particleSystem =
-                new ParticleSystem(
-                    this.THREE,
-                    nebula
-                );
+                size:
+                    2.5,
 
-        } catch (error) {
+                vertexColors:
+                    true,
 
-            console.error(
-                "[Universe] PARTICLE SYSTEM ERROR:",
-                error
+                transparent:
+                    true,
+
+                opacity:
+                    0.9,
+
+                depthWrite:
+                    false,
+
+                blending:
+                    THREE.AdditiveBlending
+            });
+
+
+        this.stars =
+            new THREE.Points(
+                geometry,
+                material
             );
-
-            this.showError(
-                error
-            );
-
-            this.particleSystem =
-                null;
-
-            return;
-        }
-
-
-        if (
-            !this.particleSystem ||
-            !this.particleSystem.points
-        ) {
-
-            this.showError(
-                new Error(
-                    "ParticleSystem created without points."
-                )
-            );
-
-            return;
-        }
 
 
         this.scene.add(
-            this.particleSystem.points
-        );
-
-
-        console.log(
-            "[Universe] PARTICLES ADDED"
-        );
-
-
-        if (
-            nebula.observation
-        ) {
-
-            const observation =
-                nebula.observation;
-
-
-            this.particleSystem
-                .points
-                .rotation.set(
-
-                    observation.pitch || 0,
-                    observation.yaw || 0,
-                    observation.roll || 0
-                );
-
-
-            if (
-                observation.position
-            ) {
-
-                this.particleSystem
-                    .points
-                    .position.copy(
-                        observation.position
-                    );
-            }
-
-
-            if (
-                Number.isFinite(
-                    observation.scale
-                )
-            ) {
-
-                this.particleSystem
-                    .points
-                    .scale.setScalar(
-                        observation.scale
-                    );
-            }
-
-
-            if (
-                Number.isFinite(
-                    observation.distance
-                ) &&
-                this.camera &&
-                this.camera.camera
-            ) {
-
-                this.camera.camera.position.z =
-                    observation.distance;
-            }
-        }
-
-
-        nebula.state =
-            "SUMMONING";
-
-
-        this.summonTimer =
-            setTimeout(
-                () => {
-
-                    if (
-                        currentCycle !==
-                        this.cycleId
-                    ) {
-
-                        return;
-                    }
-
-
-                    if (
-                        this.nebula !==
-                        nebula
-                    ) {
-
-                        return;
-                    }
-
-
-                    nebula.state =
-                        "STABLE";
-
-
-                    setPhase(
-                        "EXPLORATION"
-                    );
-
-
-                    this.summonTimer =
-                        null;
-
-
-                    console.log(
-                        "[Universe] NEBULA STABLE"
-                    );
-
-                },
-                this.summonDuration
-            );
-
-
-        console.log(
-            "[Universe] NEBULA READY:",
-            nebula.count,
-            "PARTICLES"
+            this.stars
         );
     }
 
+
+    /*
+     * =====================================================
+     * DUST
+     * =====================================================
+     */
+
+    createDust() {
+
+        const THREE =
+            this.THREE;
+
+
+        const count =
+            1800;
+
+
+        const geometry =
+            new THREE.BufferGeometry();
+
+
+        const positions =
+            new Float32Array(
+                count * 3
+            );
+
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        ) {
+
+            const index =
+                i * 3;
+
+
+            const radius =
+                100 +
+                Math.random() * 1000;
+
+
+            const theta =
+                Math.random() *
+                Math.PI *
+                2;
+
+
+            const phi =
+                Math.acos(
+                    Math.random() * 2 - 1
+                );
+
+
+            positions[index] =
+                radius *
+                Math.sin(phi) *
+                Math.cos(theta);
+
+
+            positions[index + 1] =
+                radius *
+                Math.sin(phi) *
+                Math.sin(theta);
+
+
+            positions[index + 2] =
+                radius *
+                Math.cos(phi);
+        }
+
+
+        geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(
+                positions,
+                3
+            )
+        );
+
+
+        const material =
+            new THREE.PointsMaterial({
+
+                size:
+                    1.2,
+
+                color:
+                    0x6688aa,
+
+                transparent:
+                    true,
+
+                opacity:
+                    0.25,
+
+                depthWrite:
+                    false,
+
+                blending:
+                    THREE.AdditiveBlending
+            });
+
+
+        this.dust =
+            new THREE.Points(
+                geometry,
+                material
+            );
+
+
+        this.scene.add(
+            this.dust
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * UPDATE
+     * =====================================================
+     */
 
     update(
         time,
         dt
     ) {
 
+        /*
+         * Slowly rotate the universe.
+         */
+
         if (
-            this.stars &&
-            this.stars.rotation
+            this.stars
         ) {
 
             this.stars.rotation.y +=
-                dt * 0.003;
+                dt * 0.02;
         }
 
 
         if (
-            this.dust &&
-            this.dust.rotation
+            this.dust
         ) {
 
             this.dust.rotation.y -=
-                dt * 0.0015;
+                dt * 0.008;
         }
+    }
 
 
-        if (
-            this.particleSystem
-        ) {
-
-            this.particleSystem.update(
-                time,
-                dt
-            );
-        }
-
-
-        if (
-            !this.nebula ||
-            !this.particleSystem
-        ) {
-
-            return;
-        }
+    /*
+     * =====================================================
+     * PLACEHOLDER METHODS
+     * =====================================================
+     *
+     * These keep the rest of the application from
+     * crashing while we are testing the renderer.
+     */
 
 
-        if (
-            this.nebula.state ===
-            "STABLE"
-        ) {
+    async startNewCycle() {
 
-            switch (
-                this.nebula.rotationMode
-            ) {
-
-                case "ROTATE":
-
-                    this.particleSystem
-                        .points
-                        .rotation.y +=
-                        dt * 0.015;
-
-                    break;
-
-
-                case "FLIP":
-
-                    this.particleSystem
-                        .points
-                        .rotation.x +=
-                        Math.sin(
-                            time * 0.0001
-                        ) *
-                        dt *
-                        0.01;
-
-                    break;
-
-
-                case "DEFORM":
-
-                    this.particleSystem
-                        .points
-                        .rotation.z +=
-                        dt * 0.008;
-
-                    break;
-
-                case "STOP":
-                    break;
-            }
-        }
+        console.log(
+            "[Universe] startNewCycle() ignored during minimal test."
+        );
     }
 
 
     async shuffle() {
 
-        if (
-            !this.particleSystem ||
-            !this.nebula ||
-            STATE.shuffle
-        ) {
-
-            return;
-        }
-
-
-        STATE.shuffle =
-            true;
-
-
-        setPhase(
-            "PARTICLE_SHUFFLE"
+        console.log(
+            "[Universe] shuffle() ignored during minimal test."
         );
-
-
-        try {
-
-            await shuffleParticles(
-                this.particleSystem,
-                CONFIG.OBSERVATION
-                    .SHUFFLE_TIME
-            );
-
-
-            this.nebula.state =
-                "STABLE";
-
-
-            setPhase(
-                "EXPLORATION"
-            );
-
-        } catch (error) {
-
-            console.error(
-                "[Universe] SHUFFLE ERROR:",
-                error
-            );
-
-            this.nebula.state =
-                "STABLE";
-
-            setPhase(
-                "EXPLORATION"
-            );
-
-        } finally {
-
-            STATE.shuffle =
-                false;
-        }
     }
 
 
     async completeObservation() {
 
-        if (
-            !this.particleSystem
-        ) {
-
-            return;
-        }
-
-
-        if (
-            STATE.observationComplete
-        ) {
-
-            return;
-        }
-
-
-        STATE.observationComplete =
-            true;
-
-
-        try {
-
-            await runObservationEvent(
-                this.camera,
-                this.particleSystem
-            );
-
-        } catch (error) {
-
-            console.error(
-                "[Universe] OBSERVATION ERROR:",
-                error
-            );
-        }
+        console.log(
+            "[Universe] completeObservation() ignored during minimal test."
+        );
     }
 
 
@@ -712,103 +462,10 @@ export class Universe {
 
             this.particleSystem.dispose();
 
-        } catch (_) {
-
-            try {
-
-                this.particleSystem.geometry
-                    ?.dispose();
-
-                this.particleSystem.material
-                    ?.dispose();
-
-            } catch (_) {}
-        }
+        } catch (_) {}
 
 
         this.particleSystem =
             null;
-    }
-
-
-    showError(
-        error
-    ) {
-
-        const message =
-            error?.message ||
-            String(error);
-
-
-        console.error(
-            "[Universe ERROR]",
-            message
-        );
-
-
-        let box =
-            document.getElementById(
-                "universeError"
-            );
-
-
-        if (!box) {
-
-            box =
-                document.createElement(
-                    "div"
-                );
-
-            box.id =
-                "universeError";
-
-            box.style.position =
-                "fixed";
-
-            box.style.left =
-                "10px";
-
-            box.style.right =
-                "10px";
-
-            box.style.bottom =
-                "10px";
-
-            box.style.zIndex =
-                "999999";
-
-            box.style.padding =
-                "14px";
-
-            box.style.background =
-                "rgba(120,0,0,0.92)";
-
-            box.style.color =
-                "#ffffff";
-
-            box.style.fontFamily =
-                "monospace";
-
-            box.style.fontSize =
-                "13px";
-
-            box.style.lineHeight =
-                "1.5";
-
-            box.style.whiteSpace =
-                "pre-wrap";
-
-            box.style.pointerEvents =
-                "none";
-
-            document.body.appendChild(
-                box
-            );
-        }
-
-
-        box.textContent =
-            "[UNIVERSE ERROR]\n" +
-            message;
     }
 }
