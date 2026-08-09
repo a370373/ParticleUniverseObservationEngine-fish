@@ -2,24 +2,31 @@
 
 "use strict";
 
+
 /*
  * =========================================================
  * PARTICLE UNIVERSE
  * MAIN BOOTSTRAP
  *
- * Observer ownership:
+ * CAMERA OWNERSHIP
  *
- * main.js
- *  ↓
- * Universe
- *  ↓
- * Observer
- *  ↓
- * ObservationDetector
- *  ↓
- * similarity.js
+ * CameraController
+ *      ↓
+ * THREE.PerspectiveCamera
  *
- * main.js 不建立第二個 Observer。
+ * main.js:
+ *      creates CameraController
+ *      creates ONE THREE.Camera
+ *
+ * Universe:
+ *      receives CameraController
+ *
+ * Engine:
+ *      receives REAL THREE.Camera
+ *      receives CameraController
+ *
+ * Observer:
+ *      is owned by Universe
  * =========================================================
  */
 
@@ -30,7 +37,9 @@
  * =========================================================
  */
 
-function debug(message) {
+function debug(
+    message
+) {
 
     let box =
         document.getElementById(
@@ -38,7 +47,9 @@ function debug(message) {
         );
 
 
-    if (!box) {
+    if (
+        !box
+    ) {
 
         box =
             document.createElement(
@@ -263,9 +274,6 @@ window.addEventListener(
 /*
  * =========================================================
  * IMPORTS
- *
- * observer.js 已經由 Universe 管理。
- * main.js 不再直接 import Observer。
  * =========================================================
  */
 
@@ -466,7 +474,9 @@ function startApplication(
         );
 
 
-    if (!canvas) {
+    if (
+        !canvas
+    ) {
 
         debug(
             "ERROR: universeCanvas MISSING"
@@ -482,36 +492,34 @@ function startApplication(
     );
 
 
+    /*
+     * =====================================================
+     * RUNTIME
+     * =====================================================
+     */
+
     let runtime =
         null;
-
 
     let engine =
         null;
 
-
     let booted =
         false;
 
-
     let audioStarted =
         false;
-
 
     let universe =
         null;
 
 
     /*
-     * Observer reference.
+     * =====================================================
+     * OBSERVER
      *
-     * IMPORTANT:
-     *
-     * This is NOT created here.
-     *
-     * It is taken from:
-     *
-     * universe.observer
+     * Universe owns the Observer.
+     * =====================================================
      */
 
     let observer =
@@ -522,7 +530,7 @@ function startApplication(
      * =====================================================
      * AUDIO
      * =====================================================
-     */
+ */
 
     async function handleAudio() {
 
@@ -584,7 +592,7 @@ function startApplication(
      * =====================================================
      * ENTER
      * =====================================================
-     */
+ */
 
     async function handleEnter() {
 
@@ -673,7 +681,7 @@ function startApplication(
      * =====================================================
      * MISSED ENTER RECOVERY
      * =====================================================
-     */
+ */
 
     if (
         enterRequested
@@ -689,7 +697,8 @@ function startApplication(
         );
 
     } else if (
-        window.__particleUniverseEntered === true
+        window.__particleUniverseEntered ===
+        true
     ) {
 
         debug(
@@ -707,7 +716,7 @@ function startApplication(
      * =====================================================
      * AUDIO RECOVERY
      * =====================================================
-     */
+ */
 
     if (
         audioRequested &&
@@ -729,7 +738,7 @@ function startApplication(
      * =====================================================
      * BOOT UNIVERSE
      * =====================================================
-     */
+ */
 
     async function bootUniverse() {
 
@@ -744,7 +753,9 @@ function startApplication(
             );
 
 
-        if (!runtime) {
+        if (
+            !runtime
+        ) {
 
             throw new Error(
                 "Renderer returned null."
@@ -766,7 +777,7 @@ function startApplication(
          * =================================================
          * CANVAS
          * =================================================
-         */
+ */
 
         if (
             runtime.mode ===
@@ -791,14 +802,16 @@ function startApplication(
          * =================================================
          * RAW WEBGL
          * =================================================
-         */
+ */
 
         if (
             runtime.mode ===
             "RAW_WEBGL"
         ) {
 
-            if (!runtime.gl) {
+            if (
+                !runtime.gl
+            ) {
 
                 throw new Error(
                     "Raw WebGL context missing."
@@ -825,17 +838,18 @@ function startApplication(
          * =================================================
          * THREE
          * =================================================
-         */
+ */
 
         const THREE =
             runtime.THREE;
-
 
         const renderer =
             runtime.renderer;
 
 
-        if (!THREE) {
+        if (
+            !THREE
+        ) {
 
             throw new Error(
                 "THREE is missing."
@@ -843,7 +857,9 @@ function startApplication(
         }
 
 
-        if (!renderer) {
+        if (
+            !renderer
+        ) {
 
             throw new Error(
                 "Renderer instance missing."
@@ -860,7 +876,7 @@ function startApplication(
          * =================================================
          * SCENE
          * =================================================
-         */
+ */
 
         const scene =
             new THREE.Scene();
@@ -874,9 +890,12 @@ function startApplication(
 
         /*
          * =================================================
-         * CAMERA
+         * CAMERA CONTROLLER
+         *
+         * ONE CONTROLLER
+         * ONE REAL THREE CAMERA
          * =================================================
-         */
+ */
 
         const cameraController =
             new CameraController(
@@ -884,9 +903,24 @@ function startApplication(
             );
 
 
+        /*
+         * CameraController creates
+         * the ONE real THREE.Camera.
+         */
+
         const camera =
             cameraController
                 .createCamera();
+
+
+        if (
+            !camera
+        ) {
+
+            throw new Error(
+                "CameraController failed to create camera."
+            );
+        }
 
 
         debug(
@@ -894,15 +928,29 @@ function startApplication(
         );
 
 
+        /*
+         * =================================================
+         * CAMERA SAFETY
+         * =================================================
+ */
+
         if (
             !Number.isFinite(
-                camera.position.z
+                camera.position.x
             ) ||
-            camera.position.z === 0
+            !Number.isFinite(
+                camera.position.y
+            ) ||
+            !Number.isFinite(
+                camera.position.z
+            )
         ) {
 
-            camera.position.z =
-                120;
+            cameraController.setPosition(
+                0,
+                0,
+                35
+            );
         }
 
 
@@ -910,7 +958,7 @@ function startApplication(
          * =================================================
          * UNIVERSE
          * =================================================
-         */
+ */
 
         universe =
             new Universe(
@@ -929,7 +977,7 @@ function startApplication(
          * =================================================
          * OBSERVER REFERENCE
          * =================================================
-         */
+ */
 
         observer =
             universe.observer;
@@ -955,7 +1003,7 @@ function startApplication(
          * =================================================
          * ROAMING
          * =================================================
-         */
+ */
 
         const roaming =
             new UniverseRoaming(
@@ -973,7 +1021,7 @@ function startApplication(
          * =================================================
          * DESKTOP CONTROLS
          * =================================================
-         */
+ */
 
         debug(
             "INITIALIZING DESKTOP CONTROLS"
@@ -1000,7 +1048,7 @@ function startApplication(
          * =================================================
          * MOBILE CONTROLS
          * =================================================
-         */
+ */
 
         debug(
             "INITIALIZING MOBILE CONTROLS"
@@ -1027,7 +1075,7 @@ function startApplication(
          * =================================================
          * INPUT DEBUG
          * =================================================
-         */
+ */
 
         debug(
             "INPUT DEBUG INSTALLED"
@@ -1182,7 +1230,7 @@ function startApplication(
          * =================================================
          * IMAGE UPLOAD
          * =================================================
-         */
+ */
 
         const imageInput =
             document.getElementById(
@@ -1190,7 +1238,9 @@ function startApplication(
             );
 
 
-        if (imageInput) {
+        if (
+            imageInput
+        ) {
 
             imageInput.addEventListener(
                 "change",
@@ -1198,7 +1248,8 @@ function startApplication(
 
                     const files =
                         Array.from(
-                            event.target.files || []
+                            event.target.files ||
+                            []
                         );
 
 
@@ -1268,6 +1319,10 @@ function startApplication(
                                 .startNewCycle();
 
 
+                            observer =
+                                universe.observer;
+
+
                             if (
                                 observer
                             ) {
@@ -1301,7 +1356,7 @@ function startApplication(
          * =================================================
          * RESIZE
          * =================================================
-         */
+ */
 
         function resize() {
 
@@ -1334,7 +1389,8 @@ function startApplication(
 
                 renderer.setPixelRatio(
                     Math.min(
-                        window.devicePixelRatio || 1,
+                        window.devicePixelRatio ||
+                        1,
                         2
                     )
                 );
@@ -1355,7 +1411,7 @@ function startApplication(
          * =================================================
          * NEXT NEBULA
          * =================================================
-         */
+ */
 
         window.__generateNextNebula =
             async function () {
@@ -1369,6 +1425,10 @@ function startApplication(
 
                     await universe
                         .startNewCycle();
+
+
+                    observer =
+                        universe.observer;
 
 
                     if (
@@ -1400,8 +1460,10 @@ function startApplication(
         /*
          * =================================================
          * ENGINE
+         *
+         * REAL CAMERA + CONTROLLER
          * =================================================
-         */
+ */
 
         engine =
             new Engine(
@@ -1438,7 +1500,7 @@ function startApplication(
      * =====================================================
      * FILE → BASE64
      * =====================================================
-     */
+ */
 
     function fileToBase64(
         file
