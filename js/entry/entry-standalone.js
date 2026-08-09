@@ -4,7 +4,67 @@
 
     let entered = false;
 
+    function createDebug() {
+
+        let debug =
+            document.getElementById(
+                "startupDebug"
+            );
+
+        if (!debug) {
+
+            debug =
+                document.createElement("div");
+
+            debug.id =
+                "startupDebug";
+
+            debug.style.position = "fixed";
+            debug.style.left = "10px";
+            debug.style.top = "10px";
+            debug.style.zIndex = "999999";
+            debug.style.padding = "12px";
+            debug.style.background =
+                "rgba(0,0,0,0.85)";
+            debug.style.color = "#ffffff";
+            debug.style.fontFamily =
+                "monospace";
+            debug.style.fontSize = "14px";
+            debug.style.lineHeight = "1.5";
+            debug.style.whiteSpace =
+                "pre-wrap";
+            debug.style.pointerEvents =
+                "none";
+
+            document.body.appendChild(
+                debug
+            );
+        }
+
+        return debug;
+    }
+
+
+    function debug(message) {
+
+        const box =
+            createDebug();
+
+        box.textContent +=
+            message + "\n";
+
+        console.log(
+            "[ENTRY]",
+            message
+        );
+    }
+
+
     function boot() {
+
+        debug(
+            "ENTRY SCRIPT LOADED"
+        );
 
         const layer =
             document.getElementById(
@@ -18,25 +78,24 @@
 
         if (!layer || !button) {
 
-            console.error(
-                "[ENTRY] Missing #entryLayer or #enterButton"
+            debug(
+                "ERROR: ENTRY ELEMENTS MISSING"
             );
 
             return;
         }
 
-        console.log(
-            "[ENTRY] Ready."
+        debug(
+            "ENTRY ELEMENTS OK"
         );
 
-        /*
-         * =====================================================
-         * INPUT
-         * =====================================================
-         */
 
-        layer.style.pointerEvents = "auto";
-        button.style.pointerEvents = "auto";
+        layer.style.pointerEvents =
+            "auto";
+
+        button.style.pointerEvents =
+            "auto";
+
 
         button.addEventListener(
             "click",
@@ -44,16 +103,14 @@
             false
         );
 
-        /*
-         * Mobile backup.
-         */
 
         button.addEventListener(
             "pointerup",
             function (event) {
 
                 if (
-                    event.pointerType === "touch"
+                    event.pointerType ===
+                    "touch"
                 ) {
 
                     enter(event);
@@ -64,11 +121,10 @@
         );
 
 
-        /*
-         * =====================================================
-         * ENTER
-         * =====================================================
-         */
+        debug(
+            "CLICK LISTENER READY"
+        );
+
 
         function enter(event) {
 
@@ -78,14 +134,11 @@
 
             entered = true;
 
-            if (event) {
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
 
-                event.preventDefault?.();
-                event.stopPropagation?.();
-            }
-
-            console.log(
-                "[ENTRY] Enter activated."
+            debug(
+                "CLICK DETECTED"
             );
 
 
@@ -99,28 +152,43 @@
 
                 if (
                     !document.fullscreenElement &&
-                    document.documentElement.requestFullscreen
+                    document.documentElement
+                        .requestFullscreen
                 ) {
 
                     document.documentElement
                         .requestFullscreen()
-                        .catch(
-                            function (error) {
+                        .then(
+                            function () {
 
-                                console.warn(
-                                    "[ENTRY] Fullscreen failed:",
-                                    error
+                                debug(
+                                    "FULLSCREEN OK"
+                                );
+
+                            }
+                        )
+                        .catch(
+                            function () {
+
+                                debug(
+                                    "FULLSCREEN FAILED"
                                 );
 
                             }
                         );
+
+                } else {
+
+                    debug(
+                        "FULLSCREEN SKIPPED"
+                    );
                 }
 
             } catch (error) {
 
-                console.warn(
-                    "[ENTRY] Fullscreen unavailable:",
-                    error
+                debug(
+                    "FULLSCREEN ERROR: " +
+                    error.message
                 );
             }
 
@@ -139,15 +207,14 @@
                 "entered"
             );
 
+            debug(
+                "ENTRY HIDDEN"
+            );
+
 
             /*
              * =================================================
-             * USER-GESTURE AUDIO BRIDGE
-             *
-             * main.js will also attempt playback,
-             * but this gives audio the strongest possible
-             * chance because this function is directly
-             * triggered by the user's click.
+             * AUDIO EVENT
              * =================================================
              */
 
@@ -157,10 +224,14 @@
                 )
             );
 
+            debug(
+                "AUDIO EVENT SENT"
+            );
+
 
             /*
              * =================================================
-             * START UNIVERSE
+             * MAIN EVENT
              * =================================================
              */
 
@@ -170,8 +241,12 @@
                 )
             );
 
-            console.log(
-                "[ENTRY] Universe event dispatched."
+            debug(
+                "ENTER EVENT SENT"
+            );
+
+            debug(
+                "WAITING FOR MAIN..."
             );
         }
     }
@@ -179,12 +254,13 @@
 
     /*
      * =========================================================
-     * BOOT
+     * START
      * =========================================================
      */
 
     if (
-        document.readyState === "loading"
+        document.readyState ===
+        "loading"
     ) {
 
         document.addEventListener(
