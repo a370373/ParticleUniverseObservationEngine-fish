@@ -1,0 +1,56 @@
+#entryLayer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: #000;
+
+    opacity: 1;
+    visibility: visible;
+
+    pointer-events: auto;
+
+    transition:
+        opacity 0.8s ease,
+        visibility 0.8s ease;
+}
+
+#entryLayer.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#enterButton {
+    position: relative;
+    z-index: 1001;
+
+    border: 0;
+    outline: 0;
+
+    background: transparent;
+    color: #fff;
+
+    cursor: pointer;
+
+    pointer-events: auto;
+    touch-action: manipulation;
+
+    font-size:
+        clamp(16px, 2vw, 24px);
+
+    letter-spacing:
+        0.08em;
+
+    padding: 16px 24px;
+
+    animation:
+        entryBlink
+        1.5s
+        ease-in-out
+        infinite;
+}
