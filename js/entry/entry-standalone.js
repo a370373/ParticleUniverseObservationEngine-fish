@@ -2,9 +2,7 @@
 
     "use strict";
 
-
     let entered = false;
-
 
     function boot() {
 
@@ -18,34 +16,27 @@
                 "enterButton"
             );
 
-
         if (!layer || !button) {
 
             console.error(
-                "[ENTRY] Entry elements not found."
+                "[ENTRY] Missing #entryLayer or #enterButton"
             );
 
             return;
         }
 
-
         console.log(
-            "[ENTRY] Standalone entry ready."
+            "[ENTRY] Ready."
         );
 
-
         /*
-         * =================================================
+         * =====================================================
          * INPUT
-         * =================================================
+         * =====================================================
          */
 
-        layer.style.pointerEvents =
-            "auto";
-
-        button.style.pointerEvents =
-            "auto";
-
+        layer.style.pointerEvents = "auto";
+        button.style.pointerEvents = "auto";
 
         button.addEventListener(
             "click",
@@ -53,19 +44,16 @@
             false
         );
 
+        /*
+         * Mobile backup.
+         */
 
         button.addEventListener(
             "pointerup",
             function (event) {
 
-                /*
-                 * Touch devices sometimes behave
-                 * differently from desktop click.
-                 */
-
                 if (
-                    event.pointerType ===
-                    "touch"
+                    event.pointerType === "touch"
                 ) {
 
                     enter(event);
@@ -77,9 +65,9 @@
 
 
         /*
-         * =================================================
+         * =====================================================
          * ENTER
-         * =================================================
+         * =====================================================
          */
 
         function enter(event) {
@@ -90,13 +78,14 @@
 
             entered = true;
 
+            if (event) {
 
-            event?.preventDefault?.();
-            event?.stopPropagation?.();
-
+                event.preventDefault?.();
+                event.stopPropagation?.();
+            }
 
             console.log(
-                "[ENTRY] Click to Enter."
+                "[ENTRY] Enter activated."
             );
 
 
@@ -110,18 +99,30 @@
 
                 if (
                     !document.fullscreenElement &&
-                    document.documentElement
-                        .requestFullscreen
+                    document.documentElement.requestFullscreen
                 ) {
 
                     document.documentElement
                         .requestFullscreen()
                         .catch(
-                            function () {}
+                            function (error) {
+
+                                console.warn(
+                                    "[ENTRY] Fullscreen failed:",
+                                    error
+                                );
+
+                            }
                         );
                 }
 
-            } catch (_) {}
+            } catch (error) {
+
+                console.warn(
+                    "[ENTRY] Fullscreen unavailable:",
+                    error
+                );
+            }
 
 
             /*
@@ -141,9 +142,25 @@
 
             /*
              * =================================================
-             * START UNIVERSE
+             * USER-GESTURE AUDIO BRIDGE
              *
-             * main.js is listening for this event.
+             * main.js will also attempt playback,
+             * but this gives audio the strongest possible
+             * chance because this function is directly
+             * triggered by the user's click.
+             * =================================================
+             */
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "particle-universe-audio"
+                )
+            );
+
+
+            /*
+             * =================================================
+             * START UNIVERSE
              * =================================================
              */
 
@@ -153,37 +170,21 @@
                 )
             );
 
-
-            /*
-             * Remove entry layer after fade.
-             */
-
-            setTimeout(
-                function () {
-
-                    if (
-                        layer.parentNode
-                    ) {
-
-                        layer.remove();
-                    }
-
-                },
-                1800
+            console.log(
+                "[ENTRY] Universe event dispatched."
             );
         }
     }
 
 
     /*
-     * =====================================================
-     * DOM READY
-     * =====================================================
+     * =========================================================
+     * BOOT
+     * =========================================================
      */
 
     if (
-        document.readyState ===
-        "loading"
+        document.readyState === "loading"
     ) {
 
         document.addEventListener(
