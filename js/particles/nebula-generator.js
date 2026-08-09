@@ -3,25 +3,48 @@ import {
 } from "../config.js";
 
 
+/*
+ * =========================================================
+ * NEBULA GENERATOR
+ *
+ * Image
+ *   ↓
+ * Pixel Sampling
+ *   ↓
+ * Particle Data
+ *   ↓
+ * 3D Spatial Distribution
+ *
+ * This module DOES NOT render particles.
+ * It only creates the procedural nebula data.
+ * =========================================================
+ */
+
 export async function generateNebula(
     THREE,
-    imageSource
+    imageSource = null
 ) {
 
     if (!THREE) {
 
         throw new Error(
-            "THREE is required."
+            "[NebulaGenerator] THREE is required."
         );
     }
 
 
-    let image = null;
+    console.log(
+        "[NebulaGenerator] GENERATION START"
+    );
+
+
+    let image =
+        null;
 
 
     /*
      * =====================================================
-     * OPTIONAL IMAGE
+     * IMAGE
      * =====================================================
      */
 
@@ -34,14 +57,19 @@ export async function generateNebula(
                     imageSource
                 );
 
+            console.log(
+                "[NebulaGenerator] IMAGE LOADED"
+            );
+
         } catch (error) {
 
             console.warn(
-                "[Nebula] Image failed, using procedural source:",
+                "[NebulaGenerator] IMAGE LOAD FAILED:",
                 error
             );
 
-            image = null;
+            image =
+                null;
         }
     }
 
@@ -53,10 +81,12 @@ export async function generateNebula(
      */
 
     const size =
+        CONFIG?.NEBULA?.IMAGE_SAMPLE_SIZE ||
         96;
 
 
-    let pixels = null;
+    let pixels =
+        null;
 
 
     if (image) {
@@ -74,7 +104,7 @@ export async function generateNebula(
             size;
 
 
-        const ctx =
+        const context =
             canvas.getContext(
                 "2d",
                 {
@@ -84,9 +114,9 @@ export async function generateNebula(
             );
 
 
-        if (ctx) {
+        if (context) {
 
-            ctx.drawImage(
+            context.drawImage(
                 image,
                 0,
                 0,
@@ -95,29 +125,49 @@ export async function generateNebula(
             );
 
 
-            pixels =
-                ctx.getImageData(
-                    0,
-                    0,
-                    size,
-                    size
-                ).data;
+            try {
+
+                pixels =
+                    context.getImageData(
+                        0,
+                        0,
+                        size,
+                        size
+                    ).data;
+
+            } catch (error) {
+
+                console.warn(
+                    "[NebulaGenerator] PIXEL READ FAILED:",
+                    error
+                );
+
+                pixels =
+                    null;
+            }
         }
     }
 
 
     /*
      * =====================================================
-     * PARTICLE DATA
+     * PARTICLE COUNT
      * =====================================================
      */
 
     const count =
         Math.max(
             1,
-            CONFIG.PARTICLES.MAIN
+            CONFIG?.PARTICLES?.MAIN ||
+            12000
         );
 
+
+    /*
+     * =====================================================
+     * ARRAYS
+     * =====================================================
+     */
 
     const positions =
         new Float32Array(
@@ -157,7 +207,7 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * GENERATE
+     * GENERATION
      * =====================================================
      */
 
@@ -178,7 +228,7 @@ export async function generateNebula(
 
         /*
          * =================================================
-         * IMAGE COLOR
+         * COLOR SOURCE
          * =================================================
          */
 
@@ -186,34 +236,44 @@ export async function generateNebula(
 
             const px =
                 Math.floor(
-                    Math.random() * size
+                    Math.random() *
+                    size
                 );
+
 
             const py =
                 Math.floor(
-                    Math.random() * size
+                    Math.random() *
+                    size
                 );
 
-            const p =
+
+            const pixelIndex =
                 (
-                    py * size +
+                    py *
+                    size +
                     px
                 ) * 4;
 
 
             r =
-                pixels[p] / 255;
+                pixels[pixelIndex] /
+                255;
+
 
             g =
-                pixels[p + 1] / 255;
+                pixels[pixelIndex + 1] /
+                255;
+
 
             b =
-                pixels[p + 2] / 255;
+                pixels[pixelIndex + 2] /
+                255;
 
         } else {
 
             /*
-             * Procedural fallback colors.
+             * Procedural fallback.
              */
 
             const hue =
@@ -224,9 +284,11 @@ export async function generateNebula(
                 0.15 +
                 hue * 0.65;
 
+
             g =
                 0.20 +
                 Math.random() * 0.55;
+
 
             b =
                 0.35 +
@@ -236,7 +298,7 @@ export async function generateNebula(
 
         /*
          * =================================================
-         * POSITION
+         * SPATIAL DISTRIBUTION
          * =================================================
          */
 
@@ -285,8 +347,10 @@ export async function generateNebula(
         x +=
             irregular * 25;
 
+
         y +=
             irregular * 18;
+
 
         z +=
             irregular * 25;
@@ -322,20 +386,30 @@ export async function generateNebula(
          */
 
         if (
-            Math.random() < 0.25
+            Math.random() <
+            0.25
         ) {
 
-            x *= 1.5;
-            y *= 1.45;
-            z *= 1.25;
+            x *=
+                1.5;
+
+
+            y *=
+                1.45;
+
+
+            z *=
+                1.25;
         }
 
 
         positions[n] =
             x;
 
+
         positions[n + 1] =
             y;
+
 
         positions[n + 2] =
             z;
@@ -344,8 +418,10 @@ export async function generateNebula(
         target[n] =
             x;
 
+
         target[n + 1] =
             y;
+
 
         target[n + 2] =
             z;
@@ -366,7 +442,8 @@ export async function generateNebula(
 
 
         if (
-            brightness < 0.08
+            brightness <
+            0.08
         ) {
 
             const lift =
@@ -380,11 +457,13 @@ export async function generateNebula(
                     r + lift
                 );
 
+
             g =
                 Math.min(
                     1,
                     g + lift
                 );
+
 
             b =
                 Math.min(
@@ -397,8 +476,10 @@ export async function generateNebula(
         colors[n] =
             r;
 
+
         colors[n + 1] =
             g;
+
 
         colors[n + 2] =
             b;
@@ -406,16 +487,26 @@ export async function generateNebula(
 
         /*
          * =================================================
-         * SIZE
+         * PARTICLE SIZE
          * =================================================
          */
 
+        const minSize =
+            CONFIG?.PARTICLES?.MIN_SIZE ??
+            1.5;
+
+
+        const maxSize =
+            CONFIG?.PARTICLES?.MAX_SIZE ??
+            5;
+
+
         sizes[i] =
-            CONFIG.PARTICLES.MIN_SIZE +
+            minSize +
             Math.random() *
             (
-                CONFIG.PARTICLES.MAX_SIZE -
-                CONFIG.PARTICLES.MIN_SIZE
+                maxSize -
+                minSize
             );
 
 
@@ -455,53 +546,23 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * OBSERVATION
+     * HIDDEN OBSERVATION PARAMETERS
      * =====================================================
      */
 
-    const observation = {
-
-        yaw:
-            randomRange(
-                -Math.PI,
-                Math.PI
-            ),
-
-        pitch:
-            randomRange(
-                -Math.PI * 0.45,
-                Math.PI * 0.45
-            ),
-
-        roll:
-            randomRange(
-                -Math.PI,
-                Math.PI
-            ),
-
-        distance:
-            110 *
-            randomRange(
-                0.90,
-                1.10
-            ),
-
-        position:
-            new THREE.Vector3(
-                0,
-                0,
-                0
-            ),
-
-        scale:
-            randomRange(
-                0.92,
-                1.08
-            )
-    };
+    const observation =
+        createObservation(
+            THREE
+        );
 
 
-    return {
+    /*
+     * =====================================================
+     * RESULT
+     * =====================================================
+     */
+
+    const nebula = {
 
         positions,
 
@@ -535,7 +596,114 @@ export async function generateNebula(
             new THREE.Vector3(),
 
         originalImageId:
+            imageSource || null,
+
+        imageSource:
             imageSource || null
+    };
+
+
+    console.log(
+        "[NebulaGenerator] COMPLETE:",
+        count,
+        "PARTICLES"
+    );
+
+
+    return nebula;
+}
+
+
+/*
+ * =========================================================
+ * OBSERVATION PARAMETERS
+ * =========================================================
+ */
+
+function createObservation(
+    THREE
+) {
+
+    return {
+
+        yaw:
+            randomRange(
+                -Math.PI,
+                Math.PI
+            ),
+
+        pitch:
+            randomRange(
+                -Math.PI * 0.45,
+                Math.PI * 0.45
+            ),
+
+        roll:
+            randomRange(
+                -Math.PI,
+                Math.PI
+            ),
+
+        distance:
+            110 *
+            randomRange(
+                0.90,
+                1.10
+            ),
+
+        position:
+            new THREE.Vector3(
+                randomRange(
+                    -8,
+                    8
+                ),
+                randomRange(
+                    -8,
+                    8
+                ),
+                randomRange(
+                    -8,
+                    8
+                )
+            ),
+
+        scale:
+            randomRange(
+                0.92,
+                1.08
+            ),
+
+        tolerance:
+
+            {
+                rotation:
+                    randomRange(
+                        0.03,
+                        0.05
+                    ),
+
+                distance:
+                    randomRange(
+                        0.05,
+                        0.10
+                    ),
+
+                position:
+                    randomRange(
+                        0.05,
+                        0.05
+                    ),
+
+                scale:
+                    randomRange(
+                        0.05,
+                        0.08
+                    )
+            },
+
+        similarityThreshold:
+            CONFIG?.OBSERVATION?.SIMILARITY_THRESHOLD ??
+            0.85
     };
 }
 
@@ -556,20 +724,20 @@ function loadImage(
             reject
         ) => {
 
-            const img =
+            const image =
                 new Image();
 
 
-            img.onload =
+            image.onload =
                 () => {
 
                     resolve(
-                        img
+                        image
                     );
                 };
 
 
-            img.onerror =
+            image.onerror =
                 () => {
 
                     reject(
@@ -580,7 +748,7 @@ function loadImage(
                 };
 
 
-            img.src =
+            image.src =
                 source;
         }
     );
@@ -611,7 +779,7 @@ function randomRange(
 
 /*
  * =========================================================
- * ROTATION
+ * ROTATION MODE
  * =========================================================
  */
 
@@ -620,8 +788,11 @@ function randomRotationMode() {
     const modes = [
 
         "ROTATE",
+
         "FLIP",
+
         "STOP",
+
         "DEFORM"
 
     ];
@@ -638,7 +809,7 @@ function randomRotationMode() {
 
 /*
  * =========================================================
- * NOISE
+ * PROCEDURAL NOISE
  * =========================================================
  */
 

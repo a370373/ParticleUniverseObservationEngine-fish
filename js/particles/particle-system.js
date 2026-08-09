@@ -1,3 +1,20 @@
+/*
+ * =========================================================
+ * PARTICLE SYSTEM
+ *
+ * Nebula data
+ *      ↓
+ * BufferGeometry
+ *      ↓
+ * ShaderMaterial
+ *      ↓
+ * THREE.Points
+ *
+ * This module DOES NOT generate the nebula.
+ * It renders and animates already-generated particle data.
+ * =========================================================
+ */
+
 export class ParticleSystem {
 
     constructor(
@@ -5,18 +22,73 @@ export class ParticleSystem {
         nebula
     ) {
 
+        if (!THREE) {
+
+            throw new Error(
+                "[ParticleSystem] THREE is required."
+            );
+        }
+
+
+        if (!nebula) {
+
+            throw new Error(
+                "[ParticleSystem] Nebula data is required."
+            );
+        }
+
+
+        console.log(
+            "[ParticleSystem] CONSTRUCTOR"
+        );
+
+
         this.THREE =
             THREE;
+
 
         this.data =
             nebula;
 
 
-        /*
-         * =================================================
-         * GEOMETRY
-         * =================================================
-         */
+        this.geometry =
+            null;
+
+
+        this.material =
+            null;
+
+
+        this.points =
+            null;
+
+
+        this.createGeometry();
+
+        this.createMaterial();
+
+        this.createPoints();
+
+
+        console.log(
+            "[ParticleSystem] READY:",
+            nebula.count,
+            "PARTICLES"
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * GEOMETRY
+     * =====================================================
+     */
+
+    createGeometry() {
+
+        const THREE =
+            this.THREE;
+
 
         this.geometry =
             new THREE.BufferGeometry();
@@ -28,7 +100,7 @@ export class ParticleSystem {
 
             new THREE.BufferAttribute(
 
-                nebula.positions,
+                this.data.positions,
 
                 3
             )
@@ -41,7 +113,7 @@ export class ParticleSystem {
 
             new THREE.BufferAttribute(
 
-                nebula.colors,
+                this.data.colors,
 
                 3
             )
@@ -54,18 +126,25 @@ export class ParticleSystem {
 
             new THREE.BufferAttribute(
 
-                nebula.sizes,
+                this.data.sizes,
 
                 1
             )
         );
+    }
 
 
-        /*
-         * =================================================
-         * MATERIAL
-         * =================================================
-         */
+    /*
+     * =====================================================
+     * MATERIAL
+     * =====================================================
+     */
+
+    createMaterial() {
+
+        const THREE =
+            this.THREE;
+
 
         this.material =
             new THREE.ShaderMaterial({
@@ -85,7 +164,6 @@ export class ParticleSystem {
                 blending:
                     THREE.AdditiveBlending,
 
-
                 uniforms: {
 
                     uTime: {
@@ -94,17 +172,29 @@ export class ParticleSystem {
                             0
                     },
 
-
                     uPixelRatio: {
 
                         value:
 
                             Math.min(
 
-                                window.devicePixelRatio || 1,
+                                window.devicePixelRatio ||
+                                1,
 
                                 2
                             )
+                    },
+
+                    uOpacity: {
+
+                        value:
+                            1
+                    },
+
+                    uBrightness: {
+
+                        value:
+                            1
                     }
                 },
 
@@ -128,7 +218,8 @@ export class ParticleSystem {
 
                     void main() {
 
-                        vColor = color;
+                        vColor =
+                            color;
 
 
                         vec3 p =
@@ -136,7 +227,7 @@ export class ParticleSystem {
 
 
                         /*
-                         * Very subtle particle breathing.
+                         * Subtle breathing.
                          */
 
                         float wave =
@@ -147,7 +238,9 @@ export class ParticleSystem {
 
                                 p.x * 0.03 +
 
-                                p.y * 0.02
+                                p.y * 0.02 +
+
+                                p.z * 0.015
 
                             );
 
@@ -188,7 +281,10 @@ export class ParticleSystem {
 
 
                         /*
-                         * Distance based size.
+                         * Distance based particle size.
+                         *
+                         * Close particles become large.
+                         * Distant particles become small.
                          */
 
                         float distanceScale =
@@ -211,14 +307,16 @@ export class ParticleSystem {
 
 
                         /*
-                         * Avoid absurdly huge
-                         * points when extremely close.
+                         * Prevent enormous particles
+                         * when the camera enters the cloud.
                          */
 
                         gl_PointSize =
 
                             min(
+
                                 gl_PointSize,
+
                                 64.0
                             );
 
@@ -241,6 +339,10 @@ export class ParticleSystem {
                 fragmentShader: `
 
                     varying vec3 vColor;
+
+                    uniform float uOpacity;
+
+                    uniform float uBrightness;
 
 
                     void main() {
@@ -270,7 +372,7 @@ export class ParticleSystem {
 
 
                         /*
-                         * Soft circular glow.
+                         * Soft particle glow.
                          */
 
                         float glow =
@@ -288,7 +390,7 @@ export class ParticleSystem {
 
 
                         /*
-                         * Slight center brightness.
+                         * Bright particle core.
                          */
 
                         float core =
@@ -311,8 +413,12 @@ export class ParticleSystem {
 
                             (
                                 0.35 +
-                                core * 0.65
-                            );
+
+                                core *
+                                0.65
+                            ) *
+
+                            uOpacity;
 
 
                         vec3 finalColor =
@@ -321,8 +427,11 @@ export class ParticleSystem {
 
                             (
                                 0.55 +
+
                                 glow
-                            );
+                            ) *
+
+                            uBrightness;
 
 
                         gl_FragColor =
@@ -336,26 +445,33 @@ export class ParticleSystem {
                     }
                 `
             });
+    }
 
 
-        /*
-         * =================================================
-         * POINTS
-         * =================================================
-         */
+    /*
+     * =====================================================
+     * POINTS
+     * =====================================================
+     */
+
+    createPoints() {
+
+        const THREE =
+            this.THREE;
+
 
         this.points =
             new THREE.Points(
+
                 this.geometry,
+
                 this.material
             );
 
 
         /*
-         * Frustum culling can incorrectly remove
-         * large deformed particle clouds.
-         *
-         * Keep it visible.
+         * Large procedural clouds may exceed
+         * the normal bounding volume.
          */
 
         this.points.frustumCulled =
@@ -385,7 +501,7 @@ export class ParticleSystem {
 
 
         /*
-         * Shader animation.
+         * Shader time.
          */
 
         this.material
@@ -395,10 +511,34 @@ export class ParticleSystem {
             time;
 
 
+        /*
+         * Pixel ratio may change after resize.
+         */
+
+        this.material
+            .uniforms
+            .uPixelRatio
+            .value =
+
+            Math.min(
+
+                window.devicePixelRatio ||
+                1,
+
+                2
+            );
+
+
         const positionAttribute =
             this.geometry
                 .attributes
                 .position;
+
+
+        if (!positionAttribute) {
+
+            return;
+        }
 
 
         const positionArray =
@@ -423,58 +563,40 @@ export class ParticleSystem {
 
         /*
          * =================================================
-         * ORGANIC PARTICLE MOTION
-         *
-         * IMPORTANT:
-         *
-         * We calculate from the original position
-         * every frame rather than repeatedly adding
-         * drift to the current position.
-         *
-         * This prevents infinite numerical drift.
+         * NORMAL PARTICLE LIFE
          * =================================================
          */
 
-        for (
-            let i = 0;
-            i < this.data.count;
-            i++
+        if (
+            state === "STABLE" ||
+            state === "SUMMONING"
         ) {
 
-            const n =
-                i * 3;
-
-
-            const baseX =
-                base[n];
-
-
-            const baseY =
-                base[n + 1];
-
-
-            const baseZ =
-                base[n + 2];
-
-
-            let x =
-                baseX;
-
-
-            let y =
-                baseY;
-
-
-            let z =
-                baseZ;
-
-
-            if (
-                state === "STABLE" ||
-                state === "SUMMONING"
+            for (
+                let i = 0;
+                i < this.data.count;
+                i++
             ) {
 
-                x +=
+                const n =
+                    i * 3;
+
+
+                const baseX =
+                    base[n];
+
+
+                const baseY =
+                    base[n + 1];
+
+
+                const baseZ =
+                    base[n + 2];
+
+
+                positionArray[n] =
+
+                    baseX +
 
                     drift[n] *
 
@@ -486,7 +608,9 @@ export class ParticleSystem {
                     );
 
 
-                y +=
+                positionArray[n + 1] =
+
+                    baseY +
 
                     drift[n + 1] *
 
@@ -498,7 +622,9 @@ export class ParticleSystem {
                     );
 
 
-                z +=
+                positionArray[n + 2] =
+
+                    baseZ +
 
                     drift[n + 2] *
 
@@ -511,22 +637,10 @@ export class ParticleSystem {
             }
 
 
-            positionArray[n] =
-                x;
-
-
-            positionArray[n + 1] =
-                y;
-
-
-            positionArray[n + 2] =
-                z;
+            positionAttribute
+                .needsUpdate =
+                true;
         }
-
-
-        positionAttribute
-            .needsUpdate =
-            true;
     }
 
 
@@ -564,14 +678,18 @@ export class ParticleSystem {
 
 
         const p =
-            Math.max(
+            clamp(
+                progress,
                 0,
-                Math.min(
-                    1,
-                    progress
-                )
+                1
             );
 
+
+        /*
+         * 1 → original cloud
+         *
+         * 0 → singularity
+         */
 
         const power =
             1 - p;
@@ -590,21 +708,18 @@ export class ParticleSystem {
             positionArray[n] =
 
                 base[n] *
-
                 power;
 
 
             positionArray[n + 1] =
 
                 base[n + 1] *
-
                 power;
 
 
             positionArray[n + 2] =
 
                 base[n + 2] *
-
                 power;
         }
 
@@ -626,7 +741,8 @@ export class ParticleSystem {
     ) {
 
         if (
-            !this.geometry
+            !this.geometry ||
+            !this.data
         ) {
 
             return;
@@ -643,18 +759,22 @@ export class ParticleSystem {
             positionAttribute.array;
 
 
+        const base =
+            this.data.positions;
+
+
         const p =
-            Math.max(
+            clamp(
+                progress,
                 0,
-                Math.min(
-                    1,
-                    progress
-                )
+                1
             );
 
 
         /*
          * Explosion strength.
+         *
+         * Strongest at the beginning.
          */
 
         const strength =
@@ -672,16 +792,22 @@ export class ParticleSystem {
                 i * 3;
 
 
+            /*
+             * Always derive the explosion
+             * direction from the original
+             * particle position.
+             */
+
             const x =
-                positionArray[n];
+                base[n];
 
 
             const y =
-                positionArray[n + 1];
+                base[n + 1];
 
 
             const z =
-                positionArray[n + 2];
+                base[n + 2];
 
 
             const length =
@@ -697,28 +823,37 @@ export class ParticleSystem {
                 ) || 1;
 
 
-            positionArray[n] +=
+            positionArray[n] =
+
+                x +
 
                 (
-                    x / length
+                    x /
+                    length
                 ) *
 
                 strength;
 
 
-            positionArray[n + 1] +=
+            positionArray[n + 1] =
+
+                y +
 
                 (
-                    y / length
+                    y /
+                    length
                 ) *
 
                 strength;
 
 
-            positionArray[n + 2] +=
+            positionArray[n + 2] =
+
+                z +
 
                 (
-                    z / length
+                    z /
+                    length
                 ) *
 
                 strength;
@@ -733,7 +868,68 @@ export class ParticleSystem {
 
     /*
      * =====================================================
-     * RESET TO ORIGINAL POSITIONS
+     * SET OPACITY
+     * =====================================================
+     */
+
+    setOpacity(
+        value
+    ) {
+
+        if (
+            !this.material
+        ) {
+
+            return;
+        }
+
+
+        this.material
+            .uniforms
+            .uOpacity
+            .value =
+
+            clamp(
+                value,
+                0,
+                1
+            );
+    }
+
+
+    /*
+     * =====================================================
+     * SET BRIGHTNESS
+     * =====================================================
+     */
+
+    setBrightness(
+        value
+    ) {
+
+        if (
+            !this.material
+        ) {
+
+            return;
+        }
+
+
+        this.material
+            .uniforms
+            .uBrightness
+            .value =
+
+            Math.max(
+                0,
+                value
+            );
+    }
+
+
+    /*
+     * =====================================================
+     * RESET
      * =====================================================
      */
 
@@ -769,7 +965,7 @@ export class ParticleSystem {
      * =====================================================
      * DISPOSE
      * =====================================================
-     */
+ */
 
     dispose() {
 
@@ -785,5 +981,48 @@ export class ParticleSystem {
             this.material?.dispose();
 
         } catch (_) {}
+
+
+        this.geometry =
+            null;
+
+
+        this.material =
+            null;
+
+
+        this.points =
+            null;
+
+
+        this.data =
+            null;
+
+
+        console.log(
+            "[ParticleSystem] DISPOSED"
+        );
     }
+}
+
+
+/*
+ * =========================================================
+ * UTILITY
+ * =========================================================
+ */
+
+function clamp(
+    value,
+    min,
+    max
+) {
+
+    return Math.max(
+        min,
+        Math.min(
+            max,
+            value
+        )
+    );
 }
