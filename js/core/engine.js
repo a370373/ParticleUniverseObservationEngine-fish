@@ -4,7 +4,7 @@
  * ENGINE
  * FULL RUNTIME
  *
- * Engine responsibilities:
+ * Responsibilities:
  *
  * 1. Runtime loop
  * 2. Idle state
@@ -13,24 +13,19 @@
  * 5. Roaming update
  * 6. Render
  *
- * Observation responsibilities:
+ * Observation:
  *
  * Engine
- *  ↓
+ *   ↓
  * Universe.update()
- *  ↓
+ *   ↓
  * Observer
- *  ↓
+ *   ↓
  * ObservationDetector
- *  ↓
+ *   ↓
  * similarity.js
  *
- * Engine DOES NOT:
- *
- * - Create ObservationDetector
- * - Run ObservationDetector
- * - Sync observation target
- * - Calculate similarity
+ * Engine NEVER creates or updates Observer directly.
  *
  * =========================================================
  */
@@ -39,7 +34,6 @@ import {
     updateIdle,
     STATE
 } from "./state.js";
-
 
 import {
     AmbientController,
@@ -86,16 +80,18 @@ export class Engine {
         this.universe =
             universe;
 
+        this.roaming =
+            roaming;
+
 
         /*
          * =================================================
          * OBSERVER
          * =================================================
          *
-         * Observer is owned by Universe.
+         * Universe owns Observer.
          *
-         * Engine only keeps a reference for compatibility
-         * and debugging.
+         * Engine only keeps the reference.
          * =================================================
          */
 
@@ -103,10 +99,6 @@ export class Engine {
             observer ||
             universe?.observer ||
             null;
-
-
-        this.roaming =
-            roaming;
 
 
         /*
@@ -118,7 +110,6 @@ export class Engine {
         this.ambient =
             null;
 
-
         try {
 
             this.ambient =
@@ -129,12 +120,9 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] AMBIENT CONSTRUCTOR ERROR:",
+                "[Engine] AMBIENT INIT ERROR:",
                 error
             );
-
-            this.ambient =
-                null;
         }
 
 
@@ -147,34 +135,217 @@ export class Engine {
         this.running =
             false;
 
-
         this.last =
             performance.now();
 
 
-        /*
-         * =================================================
-         * CAMERA DEBUG
-         * =================================================
-         */
-
-        this.cameraFrameCounter =
+        this.frameCount =
             0;
 
 
-        console.log(
-            "[Engine] OBSERVATION OWNERSHIP: UNIVERSE"
-        );
+        /*
+         * =================================================
+         * CAMERA DIAGNOSTICS
+         * =================================================
+         */
+
+        this.cameraDiagnosticsDone =
+            false;
 
 
         console.log(
-            "[Engine] CAMERA OWNERSHIP: CAMERA CONTROLLER"
+            "[Engine] CAMERA:",
+            this.camera
         );
 
+        console.log(
+            "[Engine] CAMERA CONTROLLER:",
+            this.cameraController
+        );
+
+        console.log(
+            "[Engine] OBSERVER OWNERSHIP: UNIVERSE"
+        );
 
         console.log(
             "[Engine] READY"
         );
+    }
+
+
+    /*
+     * =====================================================
+     * CAMERA INITIALIZATION
+     * =====================================================
+     */
+
+    initializeCamera() {
+
+        if (
+            !this.camera
+        ) {
+
+            console.error(
+                "[Engine] CAMERA IS NULL"
+            );
+
+            return false;
+        }
+
+
+        if (
+            !this.cameraController
+        ) {
+
+            console.error(
+                "[Engine] CAMERA CONTROLLER IS NULL"
+            );
+
+            return false;
+        }
+
+
+        /*
+         * CameraController must operate on
+         * exactly the same THREE camera.
+         */
+
+        this.cameraController.camera =
+            this.camera;
+
+
+        /*
+         * =================================================
+         * POSITION SYNCHRONIZATION
+         * =================================================
+         *
+         * Do NOT overwrite a valid position created by
+         * Universe.
+         *
+         * Only synchronize when controller position is
+         * invalid.
+         * =================================================
+         */
+
+        if (
+            !this.cameraController.position ||
+            !Number.isFinite(
+                this.cameraController.position.x
+            ) ||
+            !Number.isFinite(
+                this.cameraController.position.y
+            ) ||
+            !Number.isFinite(
+                this.cameraController.position.z
+            )
+        ) {
+
+            console.warn(
+                "[Engine] INVALID CONTROLLER POSITION"
+            );
+
+            this.cameraController.position =
+                this.camera.position.clone();
+        }
+
+
+        /*
+         * If CameraController position and THREE camera
+         * position are wildly different at initialization,
+         * prefer the THREE camera position.
+         *
+         * This is important because Universe may have
+         * already calculated the observation distance.
+         */
+
+        const dx =
+            this.camera.position.x -
+            this.cameraController.position.x;
+
+        const dy =
+            this.camera.position.y -
+            this.cameraController.position.y;
+
+        const dz =
+            this.camera.position.z -
+            this.cameraController.position.z;
+
+
+        const difference =
+            Math.sqrt(
+                dx * dx +
+                dy * dy +
+                dz * dz
+            );
+
+
+        if (
+            difference >
+            0.001
+        ) {
+
+            console.log(
+                "[Engine] CAMERA POSITION SYNC:",
+                {
+                    threeCamera:
+                        this.camera.position.clone(),
+
+                    controller:
+                        this.cameraController.position.clone(),
+
+                    difference
+                }
+            );
+
+
+            /*
+             * Universe / existing THREE camera wins.
+             */
+
+            this.cameraController.position.copy(
+                this.camera.position
+            );
+        }
+
+
+        /*
+         * =================================================
+         * CAMERA PROJECTION
+         * =================================================
+         */
+
+        try {
+
+            this.camera.updateProjectionMatrix();
+
+        } catch (error) {
+
+            console.error(
+                "[Engine] CAMERA PROJECTION ERROR:",
+                error
+            );
+        }
+
+
+        console.log(
+            "[Engine] CAMERA INITIALIZED:",
+            {
+                position:
+                    this.camera.position.clone(),
+
+                controller:
+                    this.cameraController.position.clone(),
+
+                yaw:
+                    this.cameraController.yaw,
+
+                pitch:
+                    this.cameraController.pitch
+            }
+        );
+
+
+        return true;
     }
 
 
@@ -194,6 +365,14 @@ export class Engine {
         }
 
 
+        /*
+         * Initialize camera exactly once before
+         * the animation loop begins.
+         */
+
+        this.initializeCamera();
+
+
         this.running =
             true;
 
@@ -207,119 +386,9 @@ export class Engine {
         );
 
 
-        /*
-         * =================================================
-         * INITIAL CAMERA SYNC
-         * =================================================
-         */
-
-        this.syncCamera();
-
-
         requestAnimationFrame(
             this.frame.bind(this)
         );
-    }
-
-
-    /*
-     * =====================================================
-     * CAMERA SYNC
-     * =====================================================
-     *
-     * Engine does not calculate camera movement here.
-     *
-     * CameraController owns:
-     *
-     * - position
-     * - yaw
-     * - pitch
-     * - velocity
-     * - lookAt
-     *
-     * Engine only makes sure the Three Camera exists and
-     * receives the controller state.
-     * =====================================================
-     */
-
-    syncCamera() {
-
-        if (
-            !this.camera ||
-            !this.cameraController
-        ) {
-
-            return false;
-        }
-
-
-        try {
-
-            /*
-             * Preferred:
-             *
-             * CameraController.update()
-             *
-             * already synchronizes:
-             *
-             * controller.position
-             *          ↓
-             * THREE camera.position
-             *
-             * Therefore do not manually calculate
-             * lookAt() here.
-             */
-
-
-            if (
-                this.cameraController.camera !==
-                this.camera
-            ) {
-
-                /*
-                 * The controller should normally already
-                 * own this exact camera instance.
-                 *
-                 * If it does not, synchronize the reference
-                 * without replacing the actual camera.
-                 */
-
-                this.cameraController.camera =
-                    this.camera;
-            }
-
-
-            /*
-             * If controller exposes its position,
-             * make sure Three Camera follows it.
-             *
-             * This is only a safety synchronization.
-             */
-
-            if (
-                this.cameraController.position &&
-                typeof this.camera.position.copy ===
-                    "function"
-            ) {
-
-                this.camera.position.copy(
-                    this.cameraController.position
-                );
-            }
-
-
-            return true;
-
-        } catch (error) {
-
-            console.error(
-                "[Engine] CAMERA SYNC ERROR:",
-                error
-            );
-
-
-            return false;
-        }
     }
 
 
@@ -339,6 +408,9 @@ export class Engine {
 
             return;
         }
+
+
+        this.frameCount++;
 
 
         /*
@@ -379,7 +451,7 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] updateIdle error:",
+                "[Engine] STATE ERROR:",
                 error
             );
         }
@@ -390,24 +462,21 @@ export class Engine {
          * CAMERA
          * =================================================
          *
-         * Camera pipeline:
-         *
-         * AmbientController
-         *        ↓
-         * CameraController
-         *        ↓
-         * THREE.Camera
-         *
          * IMPORTANT:
          *
-         * Do NOT directly call:
+         * Engine does NOT manually call lookAt().
          *
-         * camera.position.set()
-         * camera.lookAt()
+         * Engine does NOT manually calculate yaw/pitch.
          *
-         * here.
+         * CameraController owns the camera.
          *
-         * CameraController owns those operations.
+         * Pipeline:
+         *
+         * Ambient
+         *    ↓
+         * CameraController
+         *    ↓
+         * THREE Camera
          * =================================================
          */
 
@@ -419,7 +488,7 @@ export class Engine {
 
                 /*
                  * -----------------------------------------
-                 * AMBIENT
+                 * AMBIENT MODE
                  * -----------------------------------------
                  */
 
@@ -446,29 +515,20 @@ export class Engine {
 
                 /*
                  * -----------------------------------------
-                 * AMBIENT CAMERA
+                 * AMBIENT UPDATE
                  * -----------------------------------------
                  */
 
                 if (
+                    STATE.ambient &&
                     this.ambient &&
                     typeof this.ambient.update ===
                         "function"
                 ) {
 
-                    try {
-
-                        this.ambient.update(
-                            dt
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            "[Engine] AMBIENT UPDATE ERROR:",
-                            error
-                        );
-                    }
+                    this.ambient.update(
+                        dt
+                    );
                 }
 
 
@@ -487,63 +547,6 @@ export class Engine {
                     this.cameraController.update(
                         dt
                     );
-
-                } else {
-
-                    console.warn(
-                        "[Engine] CAMERA CONTROLLER MISSING"
-                    );
-                }
-
-
-                /*
-                 * -----------------------------------------
-                 * FINAL CAMERA SYNC
-                 * -----------------------------------------
-                 *
-                 * This guarantees:
-                 *
-                 * CameraController.position
-                 *          ↓
-                 * THREE Camera
-                 *
-                 * after all camera behaviour has run.
-                 */
-
-                this.syncCamera();
-
-
-                /*
-                 * -----------------------------------------
-                 * CAMERA DEBUG
-                 * -----------------------------------------
-                 *
-                 * Only print occasionally so the debug
-                 * panel does not get flooded every frame.
-                 */
-
-                this.cameraFrameCounter++;
-
-
-                if (
-                    this.cameraFrameCounter %
-                    300 ===
-                    0
-                ) {
-
-                    if (
-                        this.cameraController &&
-                        typeof this.cameraController
-                            .getDebugState ===
-                            "function"
-                    ) {
-
-                        console.log(
-                            "[Engine] CAMERA:",
-                            this.cameraController
-                                .getDebugState()
-                        );
-                    }
                 }
             }
 
@@ -559,20 +562,93 @@ export class Engine {
 
         /*
          * =================================================
+         * CAMERA DIAGNOSTIC
+         * =================================================
+         *
+         * Only print once after the first successful frame.
+         * =================================================
+         */
+
+        if (
+            !this.cameraDiagnosticsDone &&
+            this.frameCount >= 2
+        ) {
+
+            this.cameraDiagnosticsDone =
+                true;
+
+
+            try {
+
+                const position =
+                    this.camera.position;
+
+                const controllerPosition =
+                    this.cameraController?.position;
+
+
+                console.log(
+                    "[Engine] FIRST FRAME CAMERA:",
+                    {
+                        camera: {
+                            x: position.x,
+                            y: position.y,
+                            z: position.z
+                        },
+
+                        controller:
+                            controllerPosition
+                                ? {
+                                    x:
+                                        controllerPosition.x,
+
+                                    y:
+                                        controllerPosition.y,
+
+                                    z:
+                                        controllerPosition.z
+                                }
+                                : null,
+
+                        rotation: {
+                            x:
+                                this.camera.rotation.x,
+
+                            y:
+                                this.camera.rotation.y,
+
+                            z:
+                                this.camera.rotation.z
+                        },
+
+                        visible:
+                            this.camera.visible
+                    }
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    "[Engine] CAMERA DIAGNOSTIC ERROR:",
+                    error
+                );
+            }
+        }
+
+
+        /*
+         * =================================================
          * UNIVERSE
          * =================================================
          *
-         * Universe owns the entire observation pipeline.
+         * Universe owns:
          *
-         * Universe.update()
-         *      ↓
-         * Observer.update()
-         *      ↓
-         * ObservationDetector.update()
-         *      ↓
-         * similarity.js
-         *
-         * Engine does NOT call Observer directly.
+         * particles
+         * observation
+         * observer
+         * detector
+         * similarity
          * =================================================
          */
 
