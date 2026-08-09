@@ -19,6 +19,8 @@
  *        ↓
  * Camera Shock / Pull Back
  *        ↓
+ * Audio Fade In
+ *        ↓
  * Event Complete
  * =========================================================
  */
@@ -49,6 +51,12 @@ export async function runObservationEvent(
     );
 
 
+    /*
+     * =====================================================
+     * VALIDATION
+     * =====================================================
+     */
+
     if (
         !camera
     ) {
@@ -69,6 +77,10 @@ export async function runObservationEvent(
     }
 
 
+    /*
+     * Prevent duplicate event.
+     */
+
     if (
         STATE.observationEvent
     ) {
@@ -85,11 +97,9 @@ export async function runObservationEvent(
         true;
 
 
-    /*
-     * =====================================================
-     * LOCK
-     * =====================================================
-     */
+    STATE.observationLocked =
+        true;
+
 
     lockControls();
 
@@ -103,12 +113,15 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * AUDIO FADE
+         * AUDIO FADE OUT
          * =================================================
          */
 
         await fadeOutAudio(
-            1200
+            getObservationConfig(
+                "AUDIO_FADE_OUT",
+                1200
+            )
         );
 
 
@@ -130,7 +143,10 @@ export async function runObservationEvent(
 
         await collapseParticles(
             particleSystem,
-            2600
+            getObservationConfig(
+                "COLLAPSE_TIME",
+                2600
+            )
         );
 
 
@@ -153,13 +169,16 @@ export async function runObservationEvent(
         await singularity(
             particleSystem,
             camera,
-            1400
+            getObservationConfig(
+                "SINGULARITY_TIME",
+                1400
+            )
         );
 
 
         /*
          * =================================================
-         * BURST
+         * ENERGY BURST
          * =================================================
          */
 
@@ -176,7 +195,10 @@ export async function runObservationEvent(
         await energyBurst(
             particleSystem,
             camera,
-            1800
+            getObservationConfig(
+                "EXPLOSION_TIME",
+                1800
+            )
         );
 
 
@@ -186,8 +208,25 @@ export async function runObservationEvent(
          * =================================================
          */
 
-        particleSystem.resetPositions?.();
+        try {
 
+            particleSystem
+                .resetPositions?.();
+
+        } catch (error) {
+
+            console.warn(
+                "[Observation] RESET FAILED:",
+                error
+            );
+        }
+
+
+        /*
+         * =================================================
+         * COMPLETE
+         * =================================================
+         */
 
         console.log(
             "[Observation] EVENT COMPLETE"
@@ -207,8 +246,7 @@ export async function runObservationEvent(
 
 
         /*
-         * Always attempt to
-         * recover the particle system.
+         * Attempt particle recovery.
          */
 
         try {
@@ -237,6 +275,10 @@ export async function runObservationEvent(
         unlockControls();
 
 
+        STATE.observationLocked =
+            false;
+
+
         STATE.observationEvent =
             false;
     }
@@ -260,19 +302,17 @@ function lockControls() {
     );
 
 
-    /*
-     * Generic event flag.
-     *
-     * Existing controls can inspect
-     * STATE.controlsLocked without
-     * requiring direct coupling.
-     */
+    if (
+        typeof document !==
+        "undefined"
+    ) {
 
-    document.documentElement
-        .classList
-        .add(
-            "observation-locked"
-        );
+        document.documentElement
+            .classList
+            .add(
+                "observation-locked"
+            );
+    }
 }
 
 
@@ -288,11 +328,17 @@ function unlockControls() {
         false;
 
 
-    document.documentElement
-        .classList
-        .remove(
-            "observation-locked"
-        );
+    if (
+        typeof document !==
+        "undefined"
+    ) {
+
+        document.documentElement
+            .classList
+            .remove(
+                "observation-locked"
+            );
+    }
 
 
     console.log(
@@ -303,7 +349,7 @@ function unlockControls() {
 
 /*
  * =========================================================
- * AUDIO FADE
+ * AUDIO FADE OUT
  * =========================================================
  */
 
@@ -339,10 +385,6 @@ async function fadeOutAudio(
             : 1;
 
 
-    const start =
-        performance.now();
-
-
     await animate(
         duration,
         progress => {
@@ -357,7 +399,10 @@ async function fadeOutAudio(
                 Math.max(
                     0,
                     startVolume *
-                    (1 - p)
+                    (
+                        1 -
+                        p
+                    )
                 );
         }
     );
@@ -383,9 +428,14 @@ async function fadeOutAudio(
 
 function getMainAudio() {
 
-    /*
-     * First try common IDs.
-     */
+    if (
+        typeof document ===
+        "undefined"
+    ) {
+
+        return null;
+    }
+
 
     const ids = [
 
@@ -413,6 +463,8 @@ function getMainAudio() {
 
 
         if (
+            typeof HTMLMediaElement !==
+            "undefined" &&
             element instanceof
             HTMLMediaElement
         ) {
@@ -421,11 +473,6 @@ function getMainAudio() {
         }
     }
 
-
-    /*
-     * Fallback:
-     * first audio element.
-     */
 
     const audio =
         document.querySelector(
@@ -462,10 +509,6 @@ async function collapseParticles(
 
         return;
     }
-
-
-    const start =
-        performance.now();
 
 
     await animate(
@@ -514,34 +557,33 @@ async function singularity(
     duration
 ) {
 
-    const startZ =
-        Number.isFinite(
-            camera.position?.z
-        )
-            ? camera.position.z
-            : 100;
-
-
     const startX =
-        Number.isFinite(
-            camera.position?.x
-        )
-            ? camera.position.x
-            : 0;
+        getNumber(
+            camera.position?.x,
+            0
+        );
 
 
     const startY =
-        Number.isFinite(
-            camera.position?.y
-        )
-            ? camera.position.y
-            : 0;
+        getNumber(
+            camera.position?.y,
+            0
+        );
 
 
-    /*
-     * Singularity is represented
-     * by the particle system itself.
-     */
+    const startZ =
+        getNumber(
+            camera.position?.z,
+            100
+        );
+
+
+    const targetZ =
+        Math.max(
+            2,
+            startZ * 0.45
+        );
+
 
     await animate(
         duration,
@@ -564,8 +606,8 @@ async function singularity(
 
 
             /*
-             * Camera slowly approaches
-             * the center.
+             * Camera approaches
+             * the singularity.
              */
 
             if (
@@ -575,10 +617,7 @@ async function singularity(
                 camera.position.z =
                     lerp(
                         startZ,
-                        Math.max(
-                            2,
-                            startZ * 0.45
-                        ),
+                        targetZ,
                         p
                     );
 
@@ -603,7 +642,7 @@ async function singularity(
 
 
     /*
-     * Hold singularity briefly.
+     * Hold the singularity.
      */
 
     await wait(
@@ -624,33 +663,40 @@ async function energyBurst(
     duration
 ) {
 
-    const startZ =
-        Number.isFinite(
-            camera.position?.z
-        )
-            ? camera.position.z
-            : 50;
-
-
     const startX =
-        Number.isFinite(
-            camera.position?.x
-        )
-            ? camera.position.x
-            : 0;
+        getNumber(
+            camera.position?.x,
+            0
+        );
 
 
     const startY =
-        Number.isFinite(
-            camera.position?.y
-        )
-            ? camera.position.y
-            : 0;
+        getNumber(
+            camera.position?.y,
+            0
+        );
+
+
+    const startZ =
+        getNumber(
+            camera.position?.z,
+            50
+        );
 
 
     /*
-     * Camera shock.
+     * Prevent invalid camera
+     * pull-back distance.
      */
+
+    const pullDistance =
+        Math.max(
+            5,
+            Math.abs(
+                startZ
+            ) * 1.8
+        );
+
 
     await animate(
         duration,
@@ -673,28 +719,21 @@ async function energyBurst(
 
 
             /*
-             * Force camera outward.
+             * Camera pull-back.
              */
 
             if (
                 camera.position
             ) {
 
-                const pullBack =
-                    lerp(
-                        0,
-                        startZ * 1.8,
-                        p
-                    );
-
-
                 camera.position.z =
                     startZ +
-                    pullBack;
+                    pullDistance *
+                    p;
 
 
                 /*
-                 * Small shock wave.
+                 * Camera shock wave.
                  */
 
                 const shock =
@@ -703,7 +742,10 @@ async function energyBurst(
                         Math.PI *
                         8
                     ) *
-                    (1 - progress) *
+                    (
+                        1 -
+                        progress
+                    ) *
                     1.5;
 
 
@@ -714,7 +756,8 @@ async function energyBurst(
 
                 camera.position.y =
                     startY +
-                    shock * 0.5;
+                    shock *
+                    0.5;
             }
         }
     );
@@ -731,11 +774,14 @@ async function energyBurst(
 
 
     /*
-     * Restore music.
+     * Restore audio.
      */
 
     await fadeInAudio(
-        1200
+        getObservationConfig(
+            "AUDIO_FADE_IN",
+            1200
+        )
     );
 
 
@@ -815,15 +861,54 @@ function animate(
 ) {
 
     return new Promise(
-        resolve => {
+        (resolve, reject) => {
+
+            const safeDuration =
+                Math.max(
+                    1,
+                    Number(
+                        duration
+                    ) || 1
+                );
+
 
             const start =
                 performance.now();
 
 
+            let finished =
+                false;
+
+
+            function finish() {
+
+                if (
+                    finished
+                ) {
+
+                    return;
+                }
+
+
+                finished =
+                    true;
+
+
+                resolve();
+            }
+
+
             function frame(
                 now
             ) {
+
+                if (
+                    finished
+                ) {
+
+                    return;
+                }
+
 
                 const elapsed =
                     now -
@@ -834,7 +919,7 @@ function animate(
                     Math.min(
                         1,
                         elapsed /
-                        duration
+                        safeDuration
                     );
 
 
@@ -846,10 +931,14 @@ function animate(
 
                 } catch (error) {
 
-                    console.error(
-                        "[Observation] ANIMATION CALLBACK ERROR:",
+                    finished =
+                        true;
+
+                    reject(
                         error
                     );
+
+                    return;
                 }
 
 
@@ -857,7 +946,7 @@ function animate(
                     progress >= 1
                 ) {
 
-                    resolve();
+                    finish();
 
                     return;
                 }
@@ -892,7 +981,12 @@ function wait(
 
             setTimeout(
                 resolve,
-                milliseconds
+                Math.max(
+                    0,
+                    Number(
+                        milliseconds
+                    ) || 0
+                )
             );
         }
     );
@@ -932,7 +1026,9 @@ function easeInCubic(
     t
 ) {
 
-    return t * t * t;
+    return t *
+        t *
+        t;
 }
 
 
@@ -942,7 +1038,8 @@ function easeOutCubic(
 
     return 1 -
         Math.pow(
-            1 - t,
+            1 -
+            t,
             3
         );
 }
@@ -954,11 +1051,76 @@ function easeInOut(
 
     return t < 0.5
 
-        ? 2 * t * t
+        ? 2 *
+          t *
+          t
 
         : 1 -
           Math.pow(
-              -2 * t + 2,
+              -2 *
+              t +
+              2,
               2
-          ) / 2;
+          ) /
+          2;
+}
+
+
+/*
+ * =========================================================
+ * NUMBER
+ * =========================================================
+ */
+
+function getNumber(
+    value,
+    fallback
+) {
+
+    return Number.isFinite(
+        Number(
+            value
+        )
+    )
+        ? Number(
+            value
+        )
+        : fallback;
+}
+
+
+/*
+ * =========================================================
+ * OBSERVATION CONFIG
+ * =========================================================
+ */
+
+function getObservationConfig(
+    key,
+    fallback
+) {
+
+    try {
+
+        const observation =
+            CONFIG?.OBSERVATION;
+
+
+        if (
+            observation &&
+            Number.isFinite(
+                observation[key]
+            )
+        ) {
+
+            return observation[key];
+        }
+
+
+        return fallback;
+
+    } catch (_) {
+
+        return fallback;
+    }
 }
