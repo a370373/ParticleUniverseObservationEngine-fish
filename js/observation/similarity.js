@@ -1,15 +1,13 @@
 /*
  * =========================================================
  * PARTICLE UNIVERSE
- * OBSERVATION SIMILARITY
- *
- * Unified Observation Score Core
+ * OBSERVATION SIMILARITY CORE
  *
  * Camera
  *   ↓
  * Rotation
  * Distance
- * Position
+ * Observation Direction
  * Scale
  * Optional Image Similarity
  *   ↓
@@ -19,7 +17,7 @@
  * ---------------------------------------------------------
  * This module ONLY calculates observation similarity.
  *
- * It does NOT control:
+ * It does NOT:
  *
  * - Hold Timer
  * - Observation Complete
@@ -46,7 +44,7 @@
 const DEFAULTS = {
 
     /*
-     * Maximum tolerated angular error.
+     * Maximum accepted angular error.
      *
      * radians
      */
@@ -66,7 +64,10 @@ const DEFAULTS = {
 
 
     /*
-     * Maximum normalized position error.
+     * Maximum angular error for the
+     * observation position direction.
+     *
+     * radians
      */
 
     POSITION_TOLERANCE:
@@ -82,10 +83,10 @@ const DEFAULTS = {
 
 
     /*
-     * Image similarity is optional.
+     * Optional image similarity.
      *
-     * It is NOT automatically enabled unless
-     * a valid image similarity value is supplied.
+     * Only used when another module has
+     * already calculated a valid similarity.
      */
 
     IMAGE_SIMILARITY_WEIGHT:
@@ -94,10 +95,6 @@ const DEFAULTS = {
 
     /*
      * Geometry weights.
-     *
-     * When image similarity is unavailable,
-     * these four geometry weights are normalized
-     * automatically.
      */
 
     ROTATION_WEIGHT:
@@ -114,7 +111,7 @@ const DEFAULTS = {
 
 
     /*
-     * Final observation threshold.
+     * Final score required for observation.
      */
 
     SCORE_THRESHOLD:
@@ -122,11 +119,7 @@ const DEFAULTS = {
 
 
     /*
-     * Minimum individual geometry scores.
-     *
-     * Prevents a high total score from hiding
-     * a completely incorrect camera orientation
-     * or distance.
+     * Individual minimum requirements.
      */
 
     MIN_ROTATION_SCORE:
@@ -178,7 +171,7 @@ export function calculateObservationScore(
 
     /*
      * -----------------------------------------------------
-     * CAMERA NORMALIZATION
+     * CAMERA
      * -----------------------------------------------------
      */
 
@@ -192,7 +185,7 @@ export function calculateObservationScore(
      * -----------------------------------------------------
      * ROTATION
      * -----------------------------------------------------
- */
+     */
 
     const rotation =
         calculateRotationScore(
@@ -217,8 +210,12 @@ export function calculateObservationScore(
 
     /*
      * -----------------------------------------------------
-     * POSITION
+     * OBSERVATION POSITION
      * -----------------------------------------------------
+     *
+     * This compares the direction from the nebula
+     * center to the camera against the hidden
+     * observation direction.
      */
 
     const position =
@@ -237,6 +234,7 @@ export function calculateObservationScore(
 
     const scale =
         calculateScaleScore(
+            camera,
             nebula,
             target
         );
@@ -246,17 +244,6 @@ export function calculateObservationScore(
      * -----------------------------------------------------
      * OPTIONAL IMAGE SIMILARITY
      * -----------------------------------------------------
-     *
-     * This module does not calculate image similarity.
-     *
-     * It only accepts an already calculated value if
-     * another module provides one.
-     *
-     * Supported locations:
-     *
-     * nebula.observation.imageSimilarity
-     * nebula.imageSimilarity
-     *
      */
 
     const image =
@@ -268,7 +255,7 @@ export function calculateObservationScore(
 
     /*
      * -----------------------------------------------------
-     * FINAL SCORE
+     * GEOMETRY
      * -----------------------------------------------------
      */
 
@@ -281,25 +268,41 @@ export function calculateObservationScore(
         );
 
 
-    const score =
+    /*
+     * -----------------------------------------------------
+     * FINAL SCORE
+     * -----------------------------------------------------
+     */
+
+    let score =
+        geometryScore;
+
+
+    if (
         image.available
+    ) {
 
-            ? (
+        const imageWeight =
+            clamp(
+                DEFAULTS.IMAGE_SIMILARITY_WEIGHT,
+                0,
+                1
+            );
 
-                geometryScore *
-                (
-                    1 -
-                    DEFAULTS.IMAGE_SIMILARITY_WEIGHT
-                )
 
-                +
+        score =
 
-                image.score *
-                DEFAULTS.IMAGE_SIMILARITY_WEIGHT
-
+            geometryScore *
+            (
+                1 -
+                imageWeight
             )
 
-            : geometryScore;
+            +
+
+            image.score *
+            imageWeight;
+    }
 
 
     /*
@@ -307,14 +310,15 @@ export function calculateObservationScore(
      * VALIDATION
      * -----------------------------------------------------
      *
-     * A valid observation requires:
+     * Image similarity is optional.
      *
-     * 1. Final score >= threshold
-     * 2. Rotation reasonably correct
-     * 3. Distance reasonably correct
+     * When unavailable:
      *
-     * If image similarity exists,
-     * it must also satisfy the final threshold.
+     * geometry alone decides.
+     *
+     * When available:
+     *
+     * geometry + image similarity decide.
      *
      */
 
@@ -558,10 +562,6 @@ function calculateRotationScore(
 
     /*
      * Yaw remains dominant.
-     *
-     * This is intentional because the hidden
-     * projection is primarily controlled by
-     * viewing orientation.
      */
 
     const score =
@@ -595,13 +595,11 @@ function calculateRotationScore(
  * DISTANCE SCORE
  * =========================================================
  *
- * The target distance represents the radial
- * distance from the nebula center.
+ * Distance is measured radially from the
+ * nebula center.
  *
- * target.position is NOT used here.
- *
- * This prevents position and distance from
- * fighting each other.
+ * target.distance is the hidden observation
+ * distance.
  *
  * =========================================================
  */
@@ -668,24 +666,14 @@ function calculateDistanceScore(
 
 /*
  * =========================================================
- * POSITION SCORE
+ * OBSERVATION POSITION SCORE
  * =========================================================
  *
- * IMPORTANT
- * ---------------------------------------------------------
- * target.position represents the desired camera
- * direction around the nebula rather than an
- * absolute world-space camera position.
+ * target.position is treated as a hidden
+ * observation direction.
  *
- * This avoids the old bug where:
- *
- * target.distance = 110
- *
- * while:
- *
- * target.position = (-8 ... +8)
- *
- * were incorrectly compared as absolute positions.
+ * It is NOT treated as an absolute camera
+ * world-space coordinate.
  *
  * =========================================================
  */
@@ -702,6 +690,10 @@ function calculatePositionScore(
         );
 
 
+    /*
+     * Camera vector relative to nebula center.
+     */
+
     const relativeX =
         cameraPosition.x -
         center.x;
@@ -717,31 +709,29 @@ function calculatePositionScore(
         center.z;
 
 
-    const length =
+    const actualLength =
         Math.sqrt(
 
-            relativeX *
-            relativeX
+            relativeX * relativeX
 
             +
 
-            relativeY *
-            relativeY
+            relativeY * relativeY
 
             +
 
-            relativeZ *
-            relativeZ
+            relativeZ * relativeZ
 
         );
 
 
     /*
-     * No meaningful direction.
+     * Camera is too close to the center.
+     * Direction becomes undefined.
      */
 
     if (
-        length <
+        actualLength <
         0.000001
     ) {
 
@@ -756,27 +746,23 @@ function calculatePositionScore(
     }
 
 
-    /*
-     * Normalize actual camera direction.
-     */
-
     const actualX =
         relativeX /
-        length;
+        actualLength;
 
 
     const actualY =
         relativeY /
-        length;
+        actualLength;
 
 
     const actualZ =
         relativeZ /
-        length;
+        actualLength;
 
 
     /*
-     * Target observation position.
+     * Hidden observation direction.
      */
 
     const targetPosition =
@@ -805,8 +791,8 @@ function calculatePositionScore(
 
 
     /*
-     * If no valid target position exists,
-     * fall back to a neutral score.
+     * If no valid observation direction exists,
+     * do not punish the observer.
      */
 
     if (
@@ -841,38 +827,29 @@ function calculatePositionScore(
 
 
     /*
-     * Dot product gives angular
-     * directional similarity.
-     *
-     * 1  = same direction
-     * 0  = perpendicular
-     * -1 = opposite direction
+     * Direction similarity.
      */
 
     const dot =
         clamp(
-            (
-                actualX *
-                targetX
 
-                +
+            actualX * targetX
 
-                actualY *
-                targetY
+            +
 
-                +
+            actualY * targetY
 
-                actualZ *
-                targetZ
-            ),
+            +
+
+            actualZ * targetZ,
+
             -1,
             1
         );
 
 
     /*
-     * Convert angular difference
-     * into radians.
+     * Angular difference.
      */
 
     const error =
@@ -901,9 +878,20 @@ function calculatePositionScore(
  * =========================================================
  * SCALE SCORE
  * =========================================================
+ *
+ * Priority:
+ *
+ * 1. nebula.scale
+ * 2. particleSystem.points.scale
+ * 3. points.scale
+ * 4. camera zoom / explicit camera scale
+ * 5. 1
+ *
+ * =========================================================
  */
 
 function calculateScaleScore(
+    camera,
     nebula,
     target
 ) {
@@ -918,20 +906,12 @@ function calculateScaleScore(
         );
 
 
-    /*
-     * -----------------------------------------------------
-     * SCALE SOURCE
-     * -----------------------------------------------------
-     */
-
     let actualScale =
         1;
 
 
     /*
-     * Preferred:
-     *
-     * nebula.scale
+     * Nebula scale.
      */
 
     if (
@@ -950,14 +930,13 @@ function calculateScaleScore(
 
 
     /*
-     * Fallback:
-     *
-     * particleSystem.points.scale
+     * Particle object scale.
      */
 
     else {
 
         const points =
+
             nebula?.particleSystem?.points
 
             ||
@@ -979,6 +958,29 @@ function calculateScaleScore(
                     1
                 );
         }
+    }
+
+
+    /*
+     * Optional explicit camera scale.
+     *
+     * This is intentionally only a fallback.
+     */
+
+    if (
+        actualScale === 1
+        &&
+        Number.isFinite(
+            Number(
+                camera?.scale
+            )
+        )
+    ) {
+
+        actualScale =
+            Number(
+                camera.scale
+            );
     }
 
 
@@ -1011,25 +1013,23 @@ function calculateScaleScore(
 
 /*
  * =========================================================
- * IMAGE SIMILARITY
+ * OPTIONAL IMAGE SIMILARITY
  * =========================================================
  *
- * This module does not perform image comparison.
+ * This module DOES NOT calculate image similarity.
  *
- * It only consumes an external score.
+ * It only consumes an external value.
  *
- * Accepted:
- *
- * 0.0 → completely different
- * 1.0 → identical
- *
- * Supported:
+ * Accepted locations:
  *
  * nebula.observation.imageSimilarity
- *
- * OR
- *
  * nebula.imageSimilarity
+ * nebula.observationSimilarity
+ *
+ * Range:
+ *
+ * 0 → completely different
+ * 1 → identical
  *
  * =========================================================
  */
@@ -1104,22 +1104,12 @@ function normalizeCamera(
     camera
 ) {
 
-    /*
-     * Three.js camera:
-     *
-     * camera.rotation.x
-     * camera.rotation.y
-     * camera.rotation.z
-     *
-     * These are interpreted as:
-     *
-     * pitch = X
-     * yaw   = Y
-     * roll  = Z
-     */
-
     let rotation;
 
+
+    /*
+     * Three.js camera.
+     */
 
     if (
         camera.rotation
@@ -1146,7 +1136,14 @@ function normalizeCamera(
                 )
         };
 
-    } else {
+    }
+
+
+    /*
+     * Generic camera state.
+     */
+
+    else {
 
         rotation = {
 
@@ -1206,17 +1203,6 @@ function getNebulaCenter(
  * =========================================================
  * TOLERANCE SCORE
  * =========================================================
- *
- * error = 0
- *     → 1
- *
- * error = tolerance
- *     → 0
- *
- * error > tolerance
- *     → 0
- *
- * =========================================================
  */
 
 function toleranceScore(
@@ -1237,7 +1223,8 @@ function toleranceScore(
     if (
         !Number.isFinite(
             tolerance
-        ) ||
+        )
+        ||
         tolerance <=
         0
     ) {
@@ -1245,18 +1232,20 @@ function toleranceScore(
         return error <=
             0
 
-                ? 1
+            ? 1
 
-                : 0;
+            : 0;
     }
 
 
     return clamp(
+
         1 -
         (
             error /
             tolerance
         ),
+
         0,
         1
     );
@@ -1286,7 +1275,8 @@ function relativeError(
     return Math.abs(
         actual -
         target
-    ) /
+    )
+    /
     denominator;
 }
 
@@ -1431,7 +1421,9 @@ function clamp(
 ) {
 
     return Math.max(
+
         min,
+
         Math.min(
             max,
             value
