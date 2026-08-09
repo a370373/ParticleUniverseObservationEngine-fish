@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="
+            width=device-width,
+            initial-scale=1,
+            maximum-scale=1,
+            user-scalable=no,
+            viewport-fit=cover
+        "
+    >
+
+    <title>
+        Particle Universe Observation Engine
+    </title>
+
+    <!-- Base -->
+    <link
+        rel="stylesheet"
+        href="./css/base.css"
+    >
+
+    <!-- Entry -->
+    <link
+        rel="stylesheet"
+        href="./css/entry.css"
+    >
+
+    <!-- Universe -->
+    <link
+        rel="stylesheet"
+        href="./css/universe.css"
+    >
+
+    <!-- Controls -->
+    <link
+        rel="stylesheet"
+        href="./css/controls.css"
+    >
+
+</head>
+
+
+<body>
+
+    <!-- =====================================================
+         UNIVERSE CANVAS
+         ===================================================== -->
+
+    <canvas
+        id="universeCanvas"
+    ></canvas>
+
+
+    <!-- =====================================================
+         STANDALONE ENTRY LAYER
+         IMPORTANT:
+         This layer is controlled ONLY by
+         entry-standalone.js
+         ===================================================== -->
+
+    <div
+        id="entryLayer"
+    >
+
+        <button
+            id="enterButton"
+            type="button"
+        >
+            Click to Enter
+        </button>
+
+    </div>
+
+
+    <!-- =====================================================
+         CUSTOM IMAGE INPUT
+         ===================================================== -->
+
+    <label
+        id="imageAdder"
+        for="imageInput"
+        aria-label="Add image"
+    >
+        +
+    </label>
+
+
+    <input
+        id="imageInput"
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+    >
+
+
+    <!-- =====================================================
+         FALLBACK MESSAGE
+         ===================================================== -->
+
+    <div
+        id="fallbackMessage"
+    ></div>
+
+
+    <!-- =====================================================
+         ENTRY SCRIPT
+         
+         NO MODULE
+         NO IMPORT
+         NO THREE
+         NO UNIVERSE
+         
+         This MUST load independently.
+         ===================================================== -->
+
+    <script
+        src="./js/entry/entry-standalone.js"
+    ></script>
+
+
+    <!-- =====================================================
+         MAIN UNIVERSE ENGINE
+         ===================================================== -->
+
+    <script
+        type="module"
+        src="./js/main.js"
+    ></script>
+
+
+</body>
+
+</html>
