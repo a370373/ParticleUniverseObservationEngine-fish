@@ -1,479 +1,442 @@
 /*
- * =========================================================
- * PARTICLE UNIVERSE
- * ENGINE
- * FULL RUNTIME
- * =========================================================
- */
+
+* =========================================================
+* PARTICLE UNIVERSE
+* ENGINE
+* FULL RUNTIME
+* 
+* Engine responsibilities:
+* 
+* 1. Runtime loop
+* 2. Idle state
+* 3. Camera update
+* 4. Universe update
+* 5. Roaming update
+* 6. Render
+* 
+* Observation responsibilities:
+* 
+* Engine
+*  ↓
+* Universe.update()
+*  ↓
+* Observer
+*  ↓
+* ObservationDetector
+*  ↓
+* similarity.js
+* 
+* Engine DOES NOT:
+* 
+* - Create ObservationDetector
+* - Run ObservationDetector
+* - Sync observation target
+* - Calculate similarity
+* 
+* =========================================================
+  */
 
 import {
-    updateIdle,
-    STATE
+updateIdle,
+STATE
 } from "./state.js";
 
 import {
-    AmbientController,
-    shouldEnterAmbient
+AmbientController,
+shouldEnterAmbient
 } from "../universe/ambient.js";
-
-import {
-    ObservationDetector
-} from "../observation/observation-detector.js";
-
 
 export class Engine {
 
-    constructor(
-        renderer,
-        scene,
-        camera,
-        cameraController,
-        universe,
-        observer,
-        roaming
+constructor(
+    renderer,
+    scene,
+    camera,
+    cameraController,
+    universe,
+    observer,
+    roaming
+) {
+
+    console.log(
+        "[Engine] CONSTRUCTOR"
+    );
+
+
+    /*
+     * =================================================
+     * CORE
+     * =================================================
+     */
+
+    this.renderer =
+        renderer;
+
+    this.scene =
+        scene;
+
+    this.camera =
+        camera;
+
+    this.cameraController =
+        cameraController;
+
+    this.universe =
+        universe;
+
+    /*
+     * Observer is owned by Universe.
+     *
+     * Keep the reference for compatibility/debugging,
+     * but Engine does not update it directly.
+     */
+
+    this.observer =
+        observer ||
+        universe?.observer ||
+        null;
+
+    this.roaming =
+        roaming;
+
+
+    /*
+     * =================================================
+     * AMBIENT
+     * =================================================
+     */
+
+    this.ambient =
+        new AmbientController(
+            cameraController
+        );
+
+
+    /*
+     * =================================================
+     * RUNTIME
+     * =================================================
+     */
+
+    this.running =
+        false;
+
+    this.last =
+        performance.now();
+
+
+    console.log(
+        "[Engine] OBSERVATION OWNERSHIP: UNIVERSE"
+    );
+
+
+    console.log(
+        "[Engine] READY"
+    );
+}
+
+
+/*
+ * =====================================================
+ * START
+ * =====================================================
+ */
+
+start() {
+
+    if (
+        this.running
     ) {
 
-        console.log(
-            "[Engine] CONSTRUCTOR"
+        return;
+    }
+
+
+    this.running =
+        true;
+
+
+    this.last =
+        performance.now();
+
+
+    console.log(
+        "[Engine] LOOP START"
+    );
+
+
+    requestAnimationFrame(
+        this.frame.bind(this)
+    );
+}
+
+
+/*
+ * =====================================================
+ * FRAME
+ * =====================================================
+ */
+
+frame(
+    now
+) {
+
+    if (
+        !this.running
+    ) {
+
+        return;
+    }
+
+
+    /*
+     * =================================================
+     * DELTA TIME
+     * =================================================
+     */
+
+    const dt =
+        Math.min(
+            0.05,
+            Math.max(
+                0,
+                (
+                    now -
+                    this.last
+                ) / 1000
+            )
         );
 
 
-        this.renderer =
-            renderer;
-
-        this.scene =
-            scene;
-
-        this.camera =
-            camera;
-
-        this.cameraController =
-            cameraController;
-
-        this.universe =
-            universe;
-
-        this.observer =
-            observer;
-
-        this.roaming =
-            roaming;
+    this.last =
+        now;
 
 
-        /*
-         * =================================================
-         * AMBIENT
-         * =================================================
-         */
+    /*
+     * =================================================
+     * STATE
+     * =================================================
+     */
 
-        this.ambient =
-            new AmbientController(
-                cameraController
-            );
+    try {
 
-
-        /*
-         * =================================================
-         * OBSERVATION DETECTOR
-         * =================================================
-         */
-
-        this.observationDetector =
-            new ObservationDetector(
-                cameraController,
-                universe
-            );
-
-
-        /*
-         * =================================================
-         * RUNTIME
-         * =================================================
-         */
-
-        this.running =
-            false;
-
-
-        this.last =
-            performance.now();
-
-
-        console.log(
-            "[Engine] OBSERVATION DETECTOR READY"
+        updateIdle(
+            now
         );
 
+    } catch (error) {
 
-        console.log(
-            "[Engine] READY"
+        console.error(
+            "[Engine] updateIdle error:",
+            error
         );
     }
 
 
     /*
-     * =====================================================
-     * START
-     * =====================================================
+     * =================================================
+     * CAMERA
+     * =================================================
      */
 
-    start() {
+    try {
 
         if (
-            this.running
+            !STATE.observationLocked
         ) {
-
-            return;
-        }
-
-
-        this.running =
-            true;
-
-
-        this.last =
-            performance.now();
-
-
-        console.log(
-            "[Engine] LOOP START"
-        );
-
-
-        requestAnimationFrame(
-            this.frame.bind(this)
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * FRAME
-     * =====================================================
-     */
-
-    frame(
-        now
-    ) {
-
-        if (
-            !this.running
-        ) {
-
-            return;
-        }
-
-
-        const dt =
-            Math.min(
-                0.05,
-                Math.max(
-                    0,
-                    (
-                        now -
-                        this.last
-                    ) / 1000
-                )
-            );
-
-
-        this.last =
-            now;
-
-
-        /*
-         * =================================================
-         * STATE
-         * =================================================
-         */
-
-        try {
-
-            updateIdle(
-                now
-            );
-
-        } catch (error) {
-
-            console.error(
-                "[Engine] updateIdle error:",
-                error
-            );
-        }
-
-
-        /*
-         * =================================================
-         * CAMERA
-         * =================================================
-         */
-
-        try {
 
             if (
-                !STATE.observationLocked
+                shouldEnterAmbient(
+                    STATE.idleTime
+                )
             ) {
 
                 if (
-                    shouldEnterAmbient(
-                        STATE.idleTime
-                    )
+                    !STATE.ambient
                 ) {
 
-                    if (
-                        !STATE.ambient
-                    ) {
+                    STATE.ambient =
+                        true;
 
-                        STATE.ambient =
-                            true;
-
-                        console.log(
-                            "[Engine] AMBIENT MODE"
-                        );
-                    }
-                }
-
-
-                this.ambient.update(
-                    dt
-                );
-
-
-                if (
-                    this.cameraController &&
-                    typeof this.cameraController
-                        .update ===
-                    "function"
-                ) {
-
-                    this.cameraController
-                        .update(
-                            dt
-                        );
+                    console.log(
+                        "[Engine] AMBIENT MODE"
+                    );
                 }
             }
 
-        } catch (error) {
 
-            console.error(
-                "[Engine] CAMERA ERROR:",
-                error
+            /*
+             * Ambient camera behaviour.
+             */
+
+            this.ambient.update(
+                dt
             );
-        }
 
 
-        /*
-         * =================================================
-         * UNIVERSE
-         * =================================================
-         */
-
-        try {
+            /*
+             * Camera controller.
+             */
 
             if (
-                this.universe &&
-                typeof this.universe.update ===
+                this.cameraController &&
+                typeof this.cameraController
+                    .update ===
                 "function"
             ) {
 
-                this.universe.update(
-                    now,
-                    dt
-                );
-            }
-
-        } catch (error) {
-
-            console.error(
-                "[Engine] UNIVERSE ERROR:",
-                error
-            );
-        }
-
-
-        /*
-         * =================================================
-         * OBSERVATION
-         *
-         * Must run AFTER Universe update
-         * and AFTER Camera update.
-         * =================================================
-         */
-
-        try {
-
-            if (
-                this.observationDetector
-            ) {
-
-                this.syncObservationTarget();
-
-
-                this.observationDetector
+                this.cameraController
                     .update(
-                        now
+                        dt
                     );
             }
+        }
 
-        } catch (error) {
+    } catch (error) {
 
-            console.error(
-                "[Engine] OBSERVATION ERROR:",
-                error
+        console.error(
+            "[Engine] CAMERA ERROR:",
+            error
+        );
+    }
+
+
+    /*
+     * =================================================
+     * UNIVERSE
+     * =================================================
+     *
+     * IMPORTANT:
+     *
+     * Universe owns the entire observation pipeline.
+     *
+     * Universe.update()
+     *      ↓
+     * Observer.update()
+     *      ↓
+     * ObservationDetector.update()
+     *      ↓
+     * similarity.js
+     *
+     * Engine must NOT call the detector again.
+     * =================================================
+     */
+
+    try {
+
+        if (
+            this.universe &&
+            typeof this.universe.update ===
+            "function"
+        ) {
+
+            this.universe.update(
+                now,
+                dt
             );
         }
 
+    } catch (error) {
 
-        /*
-         * =================================================
-         * ROAMING
-         * =================================================
-         */
+        console.error(
+            "[Engine] UNIVERSE ERROR:",
+            error
+        );
+    }
 
-        try {
 
-            if (
-                this.roaming &&
-                typeof this.roaming.update ===
-                "function"
-            ) {
+    /*
+     * =================================================
+     * ROAMING
+     * =================================================
+     */
 
-                this.roaming.update(
-                    dt
-                );
-            }
+    try {
 
-        } catch (error) {
+        if (
+            this.roaming &&
+            typeof this.roaming.update ===
+            "function"
+        ) {
 
-            console.error(
-                "[Engine] ROAMING ERROR:",
-                error
+            this.roaming.update(
+                dt
             );
         }
 
+    } catch (error) {
 
-        /*
-         * =================================================
-         * RENDER
-         * =================================================
-         */
+        console.error(
+            "[Engine] ROAMING ERROR:",
+            error
+        );
+    }
 
-        try {
 
-            if (
-                this.renderer &&
-                this.scene &&
+    /*
+     * =================================================
+     * RENDER
+     * =================================================
+     */
+
+    try {
+
+        if (
+            this.renderer &&
+            this.scene &&
+            this.camera
+        ) {
+
+            this.renderer.render(
+                this.scene,
                 this.camera
-            ) {
-
-                this.renderer.render(
-                    this.scene,
-                    this.camera
-                );
-            }
-
-        } catch (error) {
-
-            console.error(
-                "[Engine] RENDER ERROR:",
-                error
             );
         }
 
+    } catch (error) {
 
-        /*
-         * =================================================
-         * NEXT FRAME
-         * =================================================
-         */
-
-        requestAnimationFrame(
-            this.frame.bind(this)
+        console.error(
+            "[Engine] RENDER ERROR:",
+            error
         );
     }
 
 
     /*
-     * =====================================================
-     * SYNC OBSERVATION TARGET
-     * =====================================================
-     *
-     * Universe creates a new nebula.
-     *
-     * Engine detects that change and attaches
-     * the detector exactly once.
-     *
-     * This avoids modifying the Universe runtime
-     * unnecessarily.
-     * =====================================================
+     * =================================================
+     * NEXT FRAME
+     * =================================================
      */
 
-    syncObservationTarget() {
-
-        if (
-            !this.universe ||
-            !this.observationDetector
-        ) {
-
-            return;
-        }
+    requestAnimationFrame(
+        this.frame.bind(this)
+    );
+}
 
 
-        const nebula =
-            this.universe.nebula;
+/*
+ * =====================================================
+ * STOP
+ * =====================================================
+ */
 
+stop() {
 
-        if (
-            !nebula
-        ) {
+    if (
+        !this.running
+    ) {
 
-            return;
-        }
-
-
-        if (
-            this.observationDetector
-                .currentNebula ===
-            nebula
-        ) {
-
-            return;
-        }
-
-
-        console.log(
-            "[Engine] NEW OBSERVATION TARGET"
-        );
-
-
-        this.observationDetector
-            .attach(
-                nebula
-            );
+        return;
     }
 
 
-    /*
-     * =====================================================
-     * STOP
-     * =====================================================
-     */
-
-    stop() {
-
-        if (
-            !this.running
-        ) {
-
-            return;
-        }
+    this.running =
+        false;
 
 
-        this.running =
-            false;
+    console.log(
+        "[Engine] LOOP STOP"
+    );
+}
 
-
-        console.log(
-            "[Engine] LOOP STOP"
-        );
-    }
 }

@@ -12,11 +12,12 @@
  * 3. 建立 ParticleSystem
  * 4. 管理 Nebula Cycle
  * 5. 建立 Observation Observer
- * 6. 執行 Observation Event
- * 7. Shuffle
- * 8. Runtime Update
+ * 6. 接收 Observation Complete
+ * 7. 執行 Observation Event
+ * 8. Shuffle
+ * 9. Runtime Update
  *
- * Observation 架構：
+ * Observation:
  *
  * similarity.js
  *      ↓
@@ -24,18 +25,19 @@
  *      ↓
  * Observer
  *      ↓
+ * Observer.update() => completed
+ *      ↓
  * Universe.completeObservation()
  *      ↓
- * Observation Event
+ * observation-event.js
  *
  * Universe 不負責：
  *
- * - 計算 Similarity
- * - 計算 Observation Score
+ * - Similarity 計算
  * - HOLD Timer
  * - Target 判定
+ * - Observation 判定
  *
- * 這些交給 Observation 系統。
  * =========================================================
  */
 
@@ -114,17 +116,15 @@ export class Universe {
 
         /*
          * =================================================
-         * CORE REFERENCES
+         * CORE
          * =================================================
          */
 
         this.THREE =
             THREE;
 
-
         this.scene =
             scene;
-
 
         this.camera =
             cameraController;
@@ -139,14 +139,11 @@ export class Universe {
         this.particleSystem =
             null;
 
-
         this.nebula =
             null;
 
-
         this.stars =
             null;
-
 
         this.dust =
             null;
@@ -161,10 +158,8 @@ export class Universe {
         this.cycleId =
             0;
 
-
         this.summonTimer =
             null;
-
 
         this.summonDuration =
             6500;
@@ -178,7 +173,6 @@ export class Universe {
 
         this.observer =
             null;
-
 
         this.observationEventRunning =
             false;
@@ -214,9 +208,14 @@ export class Universe {
                 );
 
 
-            this.scene.add(
+            if (
                 this.stars
-            );
+            ) {
+
+                this.scene.add(
+                    this.stars
+                );
+            }
 
 
             console.log(
@@ -236,9 +235,14 @@ export class Universe {
                 );
 
 
-            this.scene.add(
+            if (
                 this.dust
-            );
+            ) {
+
+                this.scene.add(
+                    this.dust
+                );
+            }
 
 
             console.log(
@@ -267,12 +271,11 @@ export class Universe {
          * OBSERVER
          * =================================================
          *
-         * Observer is created ONCE.
+         * Observer is created once.
          *
-         * It receives the current nebula through
-         * nebulaProvider().
-         *
-         * Observer itself does not own the nebula.
+         * Universe provides the current Nebula
+         * through a provider callback.
+         * =================================================
          */
 
         try {
@@ -290,8 +293,7 @@ export class Universe {
 
                         return this.nebula;
 
-                    },
-                    this
+                    }
                 );
 
 
@@ -311,12 +313,9 @@ export class Universe {
                 null;
 
 
-            this.showError(
-                error
+            console.warn(
+                "[Universe] OBSERVER DISABLED"
             );
-
-
-            return;
         }
 
 
@@ -381,14 +380,13 @@ export class Universe {
                 "[Universe] NOT READY"
             );
 
-
-            return;
+            return false;
         }
 
 
         /*
          * =================================================
-         * NEW CYCLE ID
+         * NEW CYCLE
          * =================================================
          */
 
@@ -398,27 +396,22 @@ export class Universe {
 
         /*
          * =================================================
-         * CANCEL OLD SUMMON TIMER
+         * CANCEL OLD TIMER
          * =================================================
          */
 
-        if (
-            this.summonTimer
-        ) {
-
-            clearTimeout(
-                this.summonTimer
-            );
-
-
-            this.summonTimer =
-                null;
-        }
+        this.clearSummonTimer();
 
 
         /*
          * =================================================
-         * RESET OBSERVATION RUNTIME
+         * RESET EVENT
+         * =================================================
+         *
+         * IMPORTANT:
+         *
+         * A new cycle invalidates the previous observation
+         * event state.
          * =================================================
          */
 
@@ -426,46 +419,64 @@ export class Universe {
             false;
 
 
+        /*
+         * =================================================
+         * RESET OBSERVER
+         * =================================================
+         */
+
         if (
-            this.observer
+            this.observer &&
+            typeof this.observer.reset ===
+                "function"
         ) {
 
-            this.observer.reset();
+            try {
 
+                this.observer.reset();
+
+            } catch (error) {
+
+                console.warn(
+                    "[Universe] OBSERVER RESET ERROR:",
+                    error
+                );
+            }
         }
 
 
         /*
-         * Do NOT manually clear
-         * observationComplete here before
-         * Observer reset.
-         *
-         * Observer owns observation state reset.
+         * =================================================
+         * RESET GLOBAL STATE
+         * =================================================
          */
-
 
         STATE.observationEvent =
             false;
 
-
         STATE.observationLocked =
             false;
-
 
         STATE.controlsLocked =
             false;
 
-
         STATE.observationStarted =
             false;
-
 
         STATE.observationComplete =
             false;
 
-
         STATE.observationProgress =
             0;
+
+        STATE.shuffle =
+            false;
+
+        STATE.explosion =
+            false;
+
+        STATE.activeNebula =
+            null;
 
 
         /*
@@ -485,12 +496,8 @@ export class Universe {
          * =================================================
          */
 
-        console.log(
-            "[Universe] GET RANDOM IMAGE"
-        );
-
-
-        let source;
+        let source =
+            null;
 
 
         try {
@@ -506,35 +513,32 @@ export class Universe {
             );
 
 
+            setPhase(
+                "ERROR"
+            );
+
+
             this.showError(
                 error
             );
 
 
-            return;
+            return false;
         }
 
 
-        /*
-         * Image library may return
-         * an empty value.
-         *
-         * Nebula generator supports
-         * procedural fallback.
-         */
-
         if (
-            !source
+            source
         ) {
 
-            console.warn(
-                "[Universe] NO IMAGE - PROCEDURAL FALLBACK"
+            console.log(
+                "[Universe] IMAGE FOUND"
             );
 
         } else {
 
-            console.log(
-                "[Universe] IMAGE FOUND"
+            console.warn(
+                "[Universe] NO IMAGE - PROCEDURAL FALLBACK"
             );
         }
 
@@ -544,11 +548,6 @@ export class Universe {
          * GENERATE NEBULA
          * =================================================
          */
-
-        console.log(
-            "[Universe] GENERATING NEBULA"
-        );
-
 
         let nebula;
 
@@ -569,18 +568,24 @@ export class Universe {
             );
 
 
-            this.showError(
-                error
-            );
+            if (
+                currentCycle ===
+                this.cycleId
+            ) {
+
+                setPhase(
+                    "ERROR"
+                );
 
 
-            return;
+                this.showError(
+                    error
+                );
+            }
+
+
+            return false;
         }
-
-
-        console.log(
-            "[Universe] NEBULA GENERATED"
-        );
 
 
         /*
@@ -599,7 +604,7 @@ export class Universe {
             );
 
 
-            return;
+            return false;
         }
 
 
@@ -613,14 +618,29 @@ export class Universe {
             !nebula
         ) {
 
-            this.showError(
+            const error =
                 new Error(
                     "generateNebula() returned null."
-                )
+                );
+
+
+            console.error(
+                "[Universe]",
+                error.message
             );
 
 
-            return;
+            setPhase(
+                "ERROR"
+            );
+
+
+            this.showError(
+                error
+            );
+
+
+            return false;
         }
 
 
@@ -643,6 +663,10 @@ export class Universe {
             nebula;
 
 
+        STATE.activeNebula =
+            nebula;
+
+
         /*
          * =================================================
          * INITIAL NEBULA STATE
@@ -653,16 +677,18 @@ export class Universe {
             "SUMMONING";
 
 
+        this.nebula.observationScore =
+            0;
+
+        this.nebula.observationHold =
+            0;
+
+
         /*
          * =================================================
          * CREATE PARTICLE SYSTEM
          * =================================================
          */
-
-        console.log(
-            "[Universe] CREATING PARTICLE SYSTEM"
-        );
-
 
         try {
 
@@ -684,12 +710,17 @@ export class Universe {
                 null;
 
 
+            setPhase(
+                "ERROR"
+            );
+
+
             this.showError(
                 error
             );
 
 
-            return;
+            return false;
         }
 
 
@@ -710,12 +741,27 @@ export class Universe {
                 );
 
 
+            console.error(
+                "[Universe]",
+                error.message
+            );
+
+
+            this.particleSystem =
+                null;
+
+
+            setPhase(
+                "ERROR"
+            );
+
+
             this.showError(
                 error
             );
 
 
-            return;
+            return false;
         }
 
 
@@ -725,9 +771,35 @@ export class Universe {
          * =================================================
          */
 
-        this.scene.add(
-            this.particleSystem.points
-        );
+        try {
+
+            this.scene.add(
+                this.particleSystem.points
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[Universe] PARTICLE ADD ERROR:",
+                error
+            );
+
+
+            this.disposeParticleSystem();
+
+
+            setPhase(
+                "ERROR"
+            );
+
+
+            this.showError(
+                error
+            );
+
+
+            return false;
+        }
 
 
         console.log(
@@ -738,125 +810,31 @@ export class Universe {
 
         /*
          * =================================================
-         * OBSERVATION TARGET
+         * CAMERA
          * =================================================
-         *
-         * IMPORTANT:
-         *
-         * observation is a TARGET.
-         *
-         * It must NOT automatically transform
-         * the particle system into the answer.
-         *
-         * Otherwise the hidden image would already
-         * be aligned when the nebula appears.
-         *
-         * Therefore:
-         *
-         * observation.rotation
-         * observation.position
-         * observation.scale
-         *
-         * are NOT directly applied here.
          */
 
-
-        if (
-            nebula.observation
-        ) {
-
-            console.log(
-                "[Universe] OBSERVATION TARGET READY"
-            );
-
-
-            /*
-             * Optional initial camera distance.
-             *
-             * This is only used if the camera has
-             * never been initialized by Particle Universe.
-             *
-             * It does NOT set camera rotation.
-             */
-
-            const observation =
-                nebula.observation;
-
-
-            if (
-                Number.isFinite(
-                    Number(
-                        observation.distance
-                    )
-                ) &&
-                this.camera &&
-                this.camera.camera
-            ) {
-
-                if (
-                    !this.camera
-                        .__particleUniverseInitialised
-                ) {
-
-                    this.camera.camera
-                        .position.z =
-                        Number(
-                            observation.distance
-                        );
-
-
-                    this.camera
-                        .__particleUniverseInitialised =
-                        true;
-
-
-                    console.log(
-                        "[Universe] INITIAL CAMERA DISTANCE:",
-                        observation.distance
-                    );
-                }
-            }
-        }
+        this.initializeCameraDistance(
+            nebula
+        );
 
 
         /*
          * =================================================
-         * ATTACH OBSERVER TO NEW NEBULA
+         * OBSERVER
          * =================================================
          */
 
-        if (
-            this.observer
-        ) {
-
-            try {
-
-                this.observer.detector
-                    .attach(
-                        nebula
-                    );
-
-
-                console.log(
-                    "[Universe] OBSERVER ATTACHED"
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "[Universe] OBSERVER ATTACH ERROR:",
-                    error
-                );
-
-            }
-        }
+        this.attachObserver(
+            nebula
+        );
 
 
         /*
          * =================================================
          * SUMMONING
          * =================================================
-         */
+ */
 
         setPhase(
             "SUMMONING"
@@ -869,7 +847,7 @@ export class Universe {
 
                     /*
                      * -------------------------------------
-                     * OLD CYCLE
+                     * OLD CYCLE PROTECTION
                      * -------------------------------------
                      */
 
@@ -884,13 +862,27 @@ export class Universe {
 
                     /*
                      * -------------------------------------
-                     * OLD NEBULA
+                     * OLD NEBULA PROTECTION
                      * -------------------------------------
                      */
 
                     if (
                         this.nebula !==
                         nebula
+                    ) {
+
+                        return;
+                    }
+
+
+                    /*
+                     * -------------------------------------
+                     * EVENT PROTECTION
+                     * -------------------------------------
+                     */
+
+                    if (
+                        this.observationEventRunning
                     ) {
 
                         return;
@@ -930,6 +922,254 @@ export class Universe {
             nebula.count,
             "PARTICLES"
         );
+
+
+        return true;
+    }
+
+
+    /*
+     * =====================================================
+     * INITIAL CAMERA DISTANCE
+     * =====================================================
+     */
+
+    initializeCameraDistance(
+        nebula
+    ) {
+
+        const observation =
+            nebula?.observation;
+
+
+        const targetDistance =
+            Number(
+                observation?.distance
+            );
+
+
+        if (
+            !Number.isFinite(
+                targetDistance
+            )
+        ) {
+
+            return;
+        }
+
+
+        const cameraObject =
+            this.camera?.camera ||
+            this.camera;
+
+
+        if (
+            !cameraObject ||
+            !cameraObject.position
+        ) {
+
+            return;
+        }
+
+
+        /*
+         * Only initialize once.
+         */
+
+        if (
+            this.camera &&
+            this.camera
+                .__particleUniverseInitialised
+        ) {
+
+            return;
+        }
+
+
+        const center =
+            this.normalizeVector3(
+                nebula?.center
+            );
+
+
+        /*
+         * Preserve current camera direction.
+         */
+
+        let dx =
+            cameraObject.position.x -
+            center.x;
+
+        let dy =
+            cameraObject.position.y -
+            center.y;
+
+        let dz =
+            cameraObject.position.z -
+            center.z;
+
+
+        const length =
+            Math.sqrt(
+                dx * dx +
+                dy * dy +
+                dz * dz
+            );
+
+
+        if (
+            length <
+            0.000001
+        ) {
+
+            dx = 0;
+            dy = 0;
+            dz = 1;
+
+        } else {
+
+            dx /=
+                length;
+
+            dy /=
+                length;
+
+            dz /=
+                length;
+        }
+
+
+        const distance =
+            Math.abs(
+                targetDistance
+            );
+
+
+        cameraObject.position.set(
+
+            center.x +
+            dx *
+            distance,
+
+            center.y +
+            dy *
+            distance,
+
+            center.z +
+            dz *
+            distance
+
+        );
+
+
+        if (
+            this.camera
+        ) {
+
+            this.camera
+                .__particleUniverseInitialised =
+                true;
+        }
+
+
+        console.log(
+            "[Universe] INITIAL CAMERA DISTANCE:",
+            distance
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * ATTACH OBSERVER
+     * =====================================================
+     */
+
+    attachObserver(
+        nebula
+    ) {
+
+        if (
+            !this.observer ||
+            !nebula
+        ) {
+
+            return false;
+        }
+
+
+        try {
+
+            /*
+             * Preferred API.
+             */
+
+            if (
+                typeof this.observer.attach ===
+                "function"
+            ) {
+
+                const attached =
+                    this.observer.attach(
+                        nebula
+                    );
+
+
+                if (
+                    attached !== false
+                ) {
+
+                    console.log(
+                        "[Universe] OBSERVER ATTACHED"
+                    );
+
+
+                    return true;
+                }
+            }
+
+
+            /*
+             * Current compatibility path.
+             */
+
+            if (
+                this.observer.detector &&
+                typeof this.observer.detector.attach ===
+                    "function"
+            ) {
+
+                this.observer.detector.attach(
+                    nebula
+                );
+
+
+                console.log(
+                    "[Universe] OBSERVER DETECTOR ATTACHED"
+                );
+
+
+                return true;
+            }
+
+
+            console.warn(
+                "[Universe] OBSERVER HAS NO ATTACH API"
+            );
+
+
+            return false;
+
+        } catch (error) {
+
+            console.error(
+                "[Universe] OBSERVER ATTACH ERROR:",
+                error
+            );
+
+
+            return false;
+        }
     }
 
 
@@ -980,10 +1220,20 @@ export class Universe {
             this.particleSystem
         ) {
 
-            this.particleSystem.update(
-                time,
-                dt
-            );
+            try {
+
+                this.particleSystem.update(
+                    time,
+                    dt
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "[Universe] PARTICLE UPDATE ERROR:",
+                    error
+                );
+            }
         }
 
 
@@ -1006,24 +1256,17 @@ export class Universe {
          * =================================================
          * STABLE NEBULA MOTION
          * =================================================
-         *
-         * Do not apply normal nebula rotation while
-         * observation event is running.
-         *
-         * Observation Event owns the particle geometry
-         * during:
-         *
-         * COLLAPSING
-         * SINGULARITY
-         * EXPLOSION
          */
 
         if (
             this.nebula.state ===
-            "STABLE" &&
+                "STABLE" &&
 
             !STATE.observationEvent &&
-            !STATE.observationLocked
+
+            !STATE.observationLocked &&
+
+            !this.observationEventRunning
         ) {
 
             switch (
@@ -1070,6 +1313,11 @@ export class Universe {
                 case "STOP":
 
                     break;
+
+
+                default:
+
+                    break;
             }
         }
 
@@ -1081,23 +1329,77 @@ export class Universe {
          *
          * Observer owns:
          *
-         * - observation timer
-         * - similarity validation
-         * - hold timer
-         * - timeout
+         * - Similarity
+         * - HOLD
+         * - Timeout
+         * - Observation completion
          *
-         * Universe only provides runtime integration.
+         * Universe only consumes the result.
+         * =================================================
          */
 
         if (
             this.observer &&
+
             this.nebula.state ===
-                "STABLE"
+                "STABLE" &&
+
+            !this.observationEventRunning &&
+
+            !STATE.observationEvent &&
+
+            !STATE.observationLocked
         ) {
 
             try {
 
-                this.observer.update();
+                if (
+                    typeof this.observer.update ===
+                    "function"
+                ) {
+
+                    const result =
+                        this.observer.update(
+                            performance.now()
+                        );
+
+
+                    /*
+                     * -----------------------------------------
+                     * OBSERVATION COMPLETE
+                     * -----------------------------------------
+                     */
+
+                    if (
+                        result &&
+                        result.completed ===
+                            true &&
+
+                        !this.observationEventRunning
+                    ) {
+
+                        console.log(
+                            "[Universe] OBSERVATION COMPLETE RECEIVED"
+                        );
+
+
+                        /*
+                         * Immediately start event.
+                         */
+
+                        this.completeObservation()
+                            .catch(
+                                error => {
+
+                                    console.error(
+                                        "[Universe] COMPLETE OBSERVATION ERROR:",
+                                        error
+                                    );
+
+                                }
+                            );
+                    }
+                }
 
             } catch (error) {
 
@@ -1105,7 +1407,6 @@ export class Universe {
                     "[Universe] OBSERVER UPDATE ERROR:",
                     error
                 );
-
             }
         }
     }
@@ -1125,20 +1426,22 @@ export class Universe {
             STATE.shuffle
         ) {
 
-            return;
+            return false;
         }
 
 
         /*
-         * Do not shuffle during observation event.
+         * Never shuffle during observation/event.
          */
 
         if (
             STATE.observationEvent ||
-            STATE.observationLocked
+            STATE.observationLocked ||
+            STATE.controlsLocked ||
+            this.observationEventRunning
         ) {
 
-            return;
+            return false;
         }
 
 
@@ -1166,12 +1469,16 @@ export class Universe {
 
 
             /*
-             * Shuffle changes arrangement,
-             * but does not change image source.
+             * Make sure current Nebula still exists.
              */
 
-            this.nebula.state =
-                "STABLE";
+            if (
+                this.nebula
+            ) {
+
+                this.nebula.state =
+                    "STABLE";
+            }
 
 
             setPhase(
@@ -1183,6 +1490,9 @@ export class Universe {
                 "[Universe] SHUFFLE COMPLETE"
             );
 
+
+            return true;
+
         } catch (error) {
 
             console.error(
@@ -1191,13 +1501,21 @@ export class Universe {
             );
 
 
-            this.nebula.state =
-                "STABLE";
+            if (
+                this.nebula
+            ) {
+
+                this.nebula.state =
+                    "STABLE";
+            }
 
 
             setPhase(
                 "EXPLORATION"
             );
+
+
+            return false;
 
         } finally {
 
@@ -1211,14 +1529,6 @@ export class Universe {
      * =====================================================
      * COMPLETE OBSERVATION
      * =====================================================
-     *
-     * Observer calls this method AFTER:
-     *
-     * similarity valid
-     *       ↓
-     * HOLD complete
-     *
-     * Universe then starts the actual event.
      */
 
     async completeObservation() {
@@ -1230,57 +1540,56 @@ export class Universe {
          */
 
         if (
-            !this.particleSystem
+            !this.particleSystem ||
+            !this.nebula
         ) {
 
             console.warn(
-                "[Universe] OBSERVATION WITHOUT PARTICLES"
+                "[Universe] OBSERVATION WITHOUT NEBULA"
             );
 
 
-            return;
+            return false;
         }
 
 
         /*
          * =================================================
-         * DUPLICATE EVENT PROTECTION
+         * DUPLICATE PROTECTION
          * =================================================
-         *
-         * DO NOT use STATE.observationComplete here.
-         *
-         * observationComplete means:
-         *
-         * "the observer successfully completed"
-         *
-         * observationEventRunning means:
-         *
-         * "the event animation is currently playing"
-         *
-         * They are different states.
          */
 
         if (
             this.observationEventRunning
         ) {
 
-            console.warn(
-                "[Universe] OBSERVATION EVENT ALREADY RUNNING"
-            );
-
-
-            return;
+            return false;
         }
 
 
         /*
          * =================================================
-         * EVENT LOCK
+         * LOCK EVENT
          * =================================================
          */
 
         this.observationEventRunning =
             true;
+
+
+        STATE.observationEvent =
+            true;
+
+        STATE.observationLocked =
+            true;
+
+        STATE.controlsLocked =
+            true;
+
+
+        setPhase(
+            "OBSERVATION_EVENT"
+        );
 
 
         console.log(
@@ -1292,22 +1601,52 @@ export class Universe {
 
             /*
              * ---------------------------------------------
-             * Particle state
+             * Nebula state
+             * ---------------------------------------------
+             */
+
+            this.nebula.state =
+                "OBSERVATION_EVENT";
+
+
+            /*
+             * ---------------------------------------------
+             * Pause Observer
              * ---------------------------------------------
              */
 
             if (
-                this.nebula
+                this.observer &&
+                typeof this.observer.pause ===
+                    "function"
             ) {
 
-                this.nebula.state =
-                    "OBSERVATION_EVENT";
+                try {
+
+                    this.observer.pause();
+
+                } catch (error) {
+
+                    console.warn(
+                        "[Universe] OBSERVER PAUSE ERROR:",
+                        error
+                    );
+                }
             }
 
 
             /*
              * ---------------------------------------------
-             * Run event
+             * Stop summon timer if still alive.
+             * ---------------------------------------------
+             */
+
+            this.clearSummonTimer();
+
+
+            /*
+             * ---------------------------------------------
+             * Execute Event
              * ---------------------------------------------
              */
 
@@ -1325,34 +1664,8 @@ export class Universe {
 
             /*
              * ---------------------------------------------
-             * Event completed.
-             *
-             * The event itself returns the universe
-             * to EXPLORATION.
+             * Restore Nebula
              * ---------------------------------------------
-             */
-
-            if (
-                this.nebula
-            ) {
-
-                this.nebula.state =
-                    "STABLE";
-            }
-
-
-        } catch (error) {
-
-            console.error(
-                "[Universe] OBSERVATION EVENT ERROR:",
-                error
-            );
-
-
-            /*
-             * =================================================
-             * EMERGENCY STATE RECOVERY
-             * =================================================
              */
 
             if (
@@ -1369,11 +1682,37 @@ export class Universe {
             );
 
 
+            return true;
+
+        } catch (error) {
+
+            console.error(
+                "[Universe] OBSERVATION EVENT ERROR:",
+                error
+            );
+
+
+            if (
+                this.nebula
+            ) {
+
+                this.nebula.state =
+                    "STABLE";
+            }
+
+
+            setPhase(
+                "EXPLORATION"
+            );
+
+
+            return false;
+
         } finally {
 
             /*
              * =================================================
-             * EVENT LOCK RELEASE
+             * RELEASE EVENT LOCK
              * =================================================
              */
 
@@ -1381,60 +1720,69 @@ export class Universe {
                 false;
 
 
+            STATE.observationEvent =
+                false;
+
+            STATE.observationLocked =
+                false;
+
+            STATE.controlsLocked =
+                false;
+
+
             /*
-             * Observer must be reset after
-             * the event has completely finished.
-             *
-             * Otherwise the old successful target
-             * could immediately trigger another event.
+             * =================================================
+             * RESET OBSERVER
+             * =================================================
              */
 
             if (
-                this.observer
+                this.observer &&
+                typeof this.observer.reset ===
+                    "function"
             ) {
 
-                this.observer.reset();
+                try {
 
+                    this.observer.reset();
 
-                /*
-                 * Re-attach current nebula.
-                 */
+                } catch (error) {
 
-                if (
-                    this.nebula
-                ) {
-
-                    try {
-
-                        this.observer.detector
-                            .attach(
-                                this.nebula
-                            );
-
-                    } catch (error) {
-
-                        console.warn(
-                            "[Universe] OBSERVER REATTACH ERROR:",
-                            error
-                        );
-
-                    }
+                    console.warn(
+                        "[Universe] OBSERVER RESET ERROR:",
+                        error
+                    );
                 }
             }
 
 
             /*
-             * Reset observation completion state
-             * so the next observation can happen.
+             * =================================================
+             * REATTACH CURRENT NEBULA
+             * =================================================
+             */
+
+            if (
+                this.nebula
+            ) {
+
+                this.attachObserver(
+                    this.nebula
+                );
+            }
+
+
+            /*
+             * =================================================
+             * RESET OBSERVATION STATE
+             * =================================================
              */
 
             STATE.observationComplete =
                 false;
 
-
             STATE.observationProgress =
                 0;
-
 
             STATE.observationStarted =
                 false;
@@ -1451,8 +1799,6 @@ export class Universe {
      * =====================================================
      * GET OBSERVATION STATE
      * =====================================================
-     *
-     * Useful for debugging / UI.
      */
 
     getObservationState() {
@@ -1462,11 +1808,17 @@ export class Universe {
             eventRunning:
                 this.observationEventRunning,
 
+
             observer:
-                this.observer
+                this.observer &&
+                typeof this.observer.getDebugState ===
+                    "function"
+
                     ? this.observer
                         .getDebugState()
+
                     : null,
+
 
             nebula:
                 this.nebula
@@ -1505,36 +1857,130 @@ export class Universe {
         }
 
 
-        try {
-
-            this.scene.remove(
-                this.particleSystem.points
-            );
-
-        } catch (_) {}
-
-
-        try {
-
-            this.particleSystem.dispose();
-
-        } catch (_) {
-
-            try {
-
-                this.particleSystem.geometry
-                    ?.dispose();
-
-
-                this.particleSystem.material
-                    ?.dispose();
-
-            } catch (_) {}
-        }
+        const particleSystem =
+            this.particleSystem;
 
 
         this.particleSystem =
             null;
+
+
+        try {
+
+            if (
+                particleSystem.points
+            ) {
+
+                this.scene.remove(
+                    particleSystem.points
+                );
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "[Universe] PARTICLE REMOVE ERROR:",
+                error
+            );
+        }
+
+
+        try {
+
+            if (
+                typeof particleSystem.dispose ===
+                    "function"
+            ) {
+
+                particleSystem.dispose();
+
+            } else {
+
+                particleSystem.geometry
+                    ?.dispose();
+
+                particleSystem.material
+                    ?.dispose();
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "[Universe] PARTICLE DISPOSE ERROR:",
+                error
+            );
+        }
+    }
+
+
+    /*
+     * =====================================================
+     * CLEAR SUMMON TIMER
+     * =====================================================
+     */
+
+    clearSummonTimer() {
+
+        if (
+            this.summonTimer
+        ) {
+
+            clearTimeout(
+                this.summonTimer
+            );
+
+
+            this.summonTimer =
+                null;
+        }
+    }
+
+
+    /*
+     * =====================================================
+     * VECTOR
+     * =====================================================
+     */
+
+    normalizeVector3(
+        value
+    ) {
+
+        return {
+
+            x:
+                Number.isFinite(
+                    Number(
+                        value?.x
+                    )
+                )
+                    ? Number(
+                        value.x
+                    )
+                    : 0,
+
+            y:
+                Number.isFinite(
+                    Number(
+                        value?.y
+                    )
+                )
+                    ? Number(
+                        value.y
+                    )
+                    : 0,
+
+            z:
+                Number.isFinite(
+                    Number(
+                        value?.z
+                    )
+                )
+                    ? Number(
+                        value.z
+                    )
+                    : 0
+        };
     }
 
 
@@ -1560,10 +2006,6 @@ export class Universe {
             message
         );
 
-
-        /*
-         * Browser guard.
-         */
 
         if (
             typeof document ===
