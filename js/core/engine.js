@@ -1,6 +1,7 @@
 /*
  * =========================================================
  * ENGINE
+ * FULL RUNTIME
  * =========================================================
  */
 
@@ -31,6 +32,7 @@ export class Engine {
             "[Engine] CONSTRUCTOR"
         );
 
+
         this.renderer =
             renderer;
 
@@ -52,22 +54,32 @@ export class Engine {
         this.roaming =
             roaming;
 
+
         this.ambient =
             new AmbientController(
                 cameraController
             );
 
+
         this.running =
             false;
 
+
         this.last =
             performance.now();
+
 
         console.log(
             "[Engine] READY"
         );
     }
 
+
+    /*
+     * =====================================================
+     * START
+     * =====================================================
+     */
 
     start() {
 
@@ -82,21 +94,31 @@ export class Engine {
             return;
         }
 
+
         this.running =
             true;
+
 
         this.last =
             performance.now();
 
+
         console.log(
             "[Engine] LOOP START"
         );
+
 
         requestAnimationFrame(
             this.frame.bind(this)
         );
     }
 
+
+    /*
+     * =====================================================
+     * FRAME
+     * =====================================================
+     */
 
     frame(
         now
@@ -109,15 +131,24 @@ export class Engine {
             return;
         }
 
+
         const dt =
             Math.min(
                 0.05,
-                (now - this.last) / 1000
+                (now - this.last) /
+                1000
             );
+
 
         this.last =
             now;
 
+
+        /*
+         * =================================================
+         * STATE
+         * =================================================
+         */
 
         try {
 
@@ -133,6 +164,12 @@ export class Engine {
             );
         }
 
+
+        /*
+         * =================================================
+         * CAMERA / AMBIENT
+         * =================================================
+         */
 
         try {
 
@@ -153,6 +190,9 @@ export class Engine {
                         STATE.ambient =
                             true;
 
+                        console.log(
+                            "[Engine] AMBIENT ENTER"
+                        );
                     }
                 }
 
@@ -176,6 +216,12 @@ export class Engine {
         }
 
 
+        /*
+         * =================================================
+         * UNIVERSE
+         * =================================================
+         */
+
         try {
 
             if (
@@ -196,6 +242,12 @@ export class Engine {
             );
         }
 
+
+        /*
+         * =================================================
+         * ROAMING
+         * =================================================
+         */
 
         try {
 
@@ -218,11 +270,82 @@ export class Engine {
 
 
         /*
-         * Observer temporarily disabled.
-         * We reconnect it after the visual pipeline
-         * is confirmed working.
+         * =================================================
+         * OBSERVER
+         * =================================================
+         *
+         * Observation is only evaluated when:
+         *
+         * 1. not ambient
+         * 2. not locked
+         * 3. not already complete
+         * 4. not shuffling
          */
 
+        try {
+
+            if (
+                this.observer &&
+                this.universe &&
+                !STATE.ambient &&
+                !STATE.observationLocked &&
+                !STATE.observationComplete &&
+                !STATE.shuffle
+            ) {
+
+                this.observer.ambient =
+                    false;
+
+
+                const result =
+                    this.observer.update(
+                        now
+                    );
+
+
+                if (
+                    result.completed
+                ) {
+
+                    console.log(
+                        "[Engine] OBSERVATION DETECTED:",
+                        result.score
+                    );
+
+
+                    this.universe
+                        .completeObservation();
+
+
+                } else if (
+                    result.failed
+                ) {
+
+                    console.log(
+                        "[Engine] OBSERVATION FAILED:",
+                        result.score
+                    );
+
+
+                    this.universe
+                        .shuffle();
+                }
+            }
+
+        } catch (error) {
+
+            console.error(
+                "[Engine] OBSERVER ERROR:",
+                error
+            );
+        }
+
+
+        /*
+         * =================================================
+         * RENDER
+         * =================================================
+         */
 
         try {
 
@@ -236,7 +359,6 @@ export class Engine {
                     this.scene,
                     this.camera
                 );
-
             }
 
         } catch (error) {
@@ -248,8 +370,32 @@ export class Engine {
         }
 
 
+        /*
+         * =================================================
+         * NEXT FRAME
+         * =================================================
+         */
+
         requestAnimationFrame(
             this.frame.bind(this)
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * STOP
+     * =====================================================
+     */
+
+    stop() {
+
+        this.running =
+            false;
+
+
+        console.log(
+            "[Engine] LOOP STOP"
         );
     }
 }
