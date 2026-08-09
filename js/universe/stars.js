@@ -22,13 +22,11 @@ export function createStars(
         i++
     ) {
 
-        const n =
-            i * 3;
+        const n = i * 3;
 
         const radius =
             500 +
-            Math.random() *
-            3000;
+            Math.random() * 3000;
 
         const theta =
             Math.random() *
@@ -56,8 +54,7 @@ export function createStars(
 
         const c =
             0.25 +
-            Math.random() *
-            0.75;
+            Math.random() * 0.75;
 
         colors[n] =
             c;
@@ -109,12 +106,6 @@ export function createStars(
 }
 
 
-/*
- * =========================================================
- * DUST
- * =========================================================
- */
-
 export function createDust(
     THREE,
     count = 1800
@@ -139,18 +130,11 @@ export function createDust(
         i++
     ) {
 
-        const n =
-            i * 3;
-
-        /*
-         * Dust is closer than
-         * the background stars.
-         */
+        const n = i * 3;
 
         const radius =
-            80 +
-            Math.random() *
-            1200;
+            300 +
+            Math.random() * 1800;
 
         const theta =
             Math.random() *
@@ -176,16 +160,9 @@ export function createDust(
             radius *
             Math.cos(phi);
 
-
-        /*
-         * Slightly dim random
-         * grayscale dust.
-         */
-
         const c =
             0.08 +
-            Math.random() *
-            0.32;
+            Math.random() * 0.25;
 
         colors[n] =
             c;
@@ -196,7 +173,6 @@ export function createDust(
         colors[n + 2] =
             c;
     }
-
 
     geometry.setAttribute(
         "position",
@@ -214,24 +190,22 @@ export function createDust(
         )
     );
 
-
     const material =
         new THREE.PointsMaterial({
 
-            size: 0.7,
+            size: 2.0,
 
             vertexColors: true,
 
             transparent: true,
 
-            opacity: 0.35,
+            opacity: 0.22,
 
             depthWrite: false,
 
             blending:
                 THREE.AdditiveBlending
         });
-
 
     return new THREE.Points(
         geometry,
