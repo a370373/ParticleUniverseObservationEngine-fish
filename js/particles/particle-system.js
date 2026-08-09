@@ -5,11 +5,11 @@
 * PARTICLE SYSTEM
 * 
 * Nebula Data
-*  ↓
+* ↓
 * BufferGeometry
-*  ↓
+* ↓
 * ShaderMaterial
-*  ↓
+* ↓
 * THREE.Points
 * 
 * Runtime states:
@@ -23,16 +23,18 @@
 * 
 * IMPORTANT
 * ---
+* 
 * data.positions
-*  = logical/base nebula positions
+* = logical / generated nebula positions
 * 
 * geometry.position
-*  = visible/runtime particle positions
+* = visible / runtime particle positions
 * 
-* Event animations control geometry.position directly.
+* Event animations own geometry.position directly.
 * 
-* update() NEVER overwrites geometry positions while
-* an event state is active.
+* update()
+* NEVER overwrites geometry.position while an
+* event state is active.
 * 
 * This module does NOT generate nebula data.
 * =========================================================
@@ -69,18 +71,14 @@ constructor(
     this.THREE =
         THREE;
 
-
     this.data =
         nebula;
-
 
     this.geometry =
         null;
 
-
     this.material =
         null;
-
 
     this.points =
         null;
@@ -88,13 +86,12 @@ constructor(
 
     /*
      * =================================================
-     * ORIGINAL NEBULA
+     * ORIGINAL POSITIONS
      * =================================================
      *
-     * Immutable runtime snapshot.
+     * Immutable snapshot of the generated nebula.
      *
-     * This is NEVER modified by shuffle,
-     * collapse or explosion.
+     * Shuffle / collapse / explosion NEVER modify this.
      */
 
     this.originalPositions =
@@ -103,13 +100,12 @@ constructor(
 
     /*
      * =================================================
-     * SHUFFLE DATA
+     * SHUFFLE
      * =================================================
      */
 
     this.shuffleStartPositions =
         null;
-
 
     this.shuffleTargets =
         null;
@@ -117,17 +113,15 @@ constructor(
 
     /*
      * =================================================
-     * EXPLOSION DATA
+     * EXPLOSION
      * =================================================
      */
 
     this.explosionDirections =
         null;
 
-
     this.explosionStrength =
         1;
-
 
     this.explosionRadius =
         1;
@@ -182,8 +176,7 @@ prepareData() {
 
             this.data.count =
                 Math.floor(
-                    this.data.positions.length /
-                    3
+                    this.data.positions.length / 3
                 );
 
         } else {
@@ -198,8 +191,18 @@ prepareData() {
         this.data.count;
 
 
+    if (
+        count <= 0
+    ) {
+
+        throw new Error(
+            "[ParticleSystem] Nebula contains no particles."
+        );
+    }
+
+
     /*
-     * Positions are mandatory.
+     * Positions
      */
 
     if (
@@ -252,10 +255,8 @@ prepareData() {
             colors[n] =
                 1;
 
-
             colors[n + 1] =
                 1;
-
 
             colors[n + 2] =
                 1;
@@ -363,7 +364,7 @@ prepareData() {
 
 /*
  * =====================================================
- * GEOMETRY
+ * CREATE GEOMETRY
  * =====================================================
  */
 
@@ -421,83 +422,7 @@ createGeometry() {
 
 /*
  * =====================================================
- * RUNTIME DATA
- * =====================================================
- */
-
-prepareRuntimeData() {
-
-    const count =
-        this.data.count;
-
-
-    /*
-     * Snapshot original generated nebula.
-     */
-
-    this.originalPositions =
-        new Float32Array(
-            count * 3
-        );
-
-
-    this.originalPositions.set(
-        this.data.positions
-    );
-
-
-    /*
-     * Ensure visible positions
-     * start exactly at the original data.
-     */
-
-    const positions =
-        this.geometry
-            .attributes
-            .position
-            .array;
-
-
-    positions.set(
-        this.originalPositions
-    );
-
-
-    /*
-     * Event data starts empty.
-     */
-
-    this.shuffleStartPositions =
-        null;
-
-
-    this.shuffleTargets =
-        null;
-
-
-    this.explosionDirections =
-        null;
-
-
-    this.explosionStrength =
-        1;
-
-
-    this.explosionRadius =
-        1;
-
-
-    this.geometry
-        .attributes
-        .position
-        .needsUpdate =
-        true;
-}
-
-
-/*
- * =====================================================
- * MATERIAL
+ * CREATE MATERIAL
  * =====================================================
  */
 
@@ -508,12 +433,10 @@ createMaterial() {
 
 
     const pixelRatio =
-        typeof window !==
-        "undefined"
+        typeof window !== "undefined"
 
             ? Math.min(
-                window.devicePixelRatio ||
-                1,
+                window.devicePixelRatio || 1,
                 2
             )
 
@@ -541,27 +464,19 @@ createMaterial() {
             uniforms: {
 
                 uTime: {
-
-                    value:
-                        0
+                    value: 0
                 },
 
                 uPixelRatio: {
-
-                    value:
-                        pixelRatio
+                    value: pixelRatio
                 },
 
                 uOpacity: {
-
-                    value:
-                        1
+                    value: 1
                 },
 
                 uBrightness: {
-
-                    value:
-                        1
+                    value: 1
                 }
             },
 
@@ -588,7 +503,11 @@ createMaterial() {
 
 
                     /*
-                     * Subtle nebula breathing.
+                     * Extremely subtle breathing.
+                     *
+                     * This is intentionally weak.
+                     * It must never destroy the
+                     * generated image structure.
                      */
 
                     float wave =
@@ -660,11 +579,8 @@ createMaterial() {
                     gl_PointSize =
 
                         min(
-
                             gl_PointSize,
-
                             64.0
-
                         );
 
 
@@ -717,13 +633,9 @@ createMaterial() {
                         1.0 -
 
                         smoothstep(
-
                             0.05,
-
                             0.5,
-
                             d
-
                         );
 
 
@@ -732,13 +644,9 @@ createMaterial() {
                         1.0 -
 
                         smoothstep(
-
                             0.0,
-
                             0.22,
-
                             d
-
                         );
 
 
@@ -748,9 +656,7 @@ createMaterial() {
 
                         (
                             0.35 +
-
-                            core *
-                            0.65
+                            core * 0.65
                         ) *
 
                         uOpacity;
@@ -762,7 +668,6 @@ createMaterial() {
 
                         (
                             0.55 +
-
                             glow
                         ) *
 
@@ -772,11 +677,8 @@ createMaterial() {
                     gl_FragColor =
 
                         vec4(
-
                             finalColor,
-
                             alpha
-
                         );
                 }
             `
@@ -786,7 +688,7 @@ createMaterial() {
 
 /*
  * =====================================================
- * POINTS
+ * CREATE POINTS
  * =====================================================
  */
 
@@ -802,12 +704,79 @@ createPoints() {
             this.geometry,
 
             this.material
-
         );
 
 
     this.points.frustumCulled =
         false;
+}
+
+
+/*
+ * =====================================================
+ * RUNTIME DATA
+ * =====================================================
+ */
+
+prepareRuntimeData() {
+
+    const count =
+        this.data.count;
+
+
+    /*
+     * Immutable generated nebula.
+     */
+
+    this.originalPositions =
+        new Float32Array(
+            count * 3
+        );
+
+
+    this.originalPositions.set(
+        this.data.positions
+    );
+
+
+    /*
+     * Visible positions start
+     * exactly at generated positions.
+     */
+
+    const positions =
+        this.geometry
+            .attributes
+            .position
+            .array;
+
+
+    positions.set(
+        this.originalPositions
+    );
+
+
+    this.shuffleStartPositions =
+        null;
+
+    this.shuffleTargets =
+        null;
+
+    this.explosionDirections =
+        null;
+
+    this.explosionStrength =
+        1;
+
+    this.explosionRadius =
+        1;
+
+
+    this.geometry
+        .attributes
+        .position
+        .needsUpdate =
+        true;
 }
 
 
@@ -833,20 +802,21 @@ update(
 
 
     /*
-     * Shader time.
+     * Shader clock.
      */
 
     this.material
         .uniforms
         .uTime
         .value =
+
         Number.isFinite(time)
             ? time
             : 0;
 
 
     /*
-     * Pixel ratio.
+     * Device pixel ratio.
      */
 
     this.material
@@ -854,12 +824,10 @@ update(
         .uPixelRatio
         .value =
 
-        typeof window !==
-        "undefined"
+        typeof window !== "undefined"
 
             ? Math.min(
-                window.devicePixelRatio ||
-                1,
+                window.devicePixelRatio || 1,
                 2
             )
 
@@ -867,7 +835,9 @@ update(
 
 
     /*
-     * Event states own geometry.
+     * Event states own visible geometry.
+     *
+     * NEVER touch geometry.position here.
      */
 
     const state =
@@ -875,17 +845,10 @@ update(
 
 
     if (
-        state ===
-        "SHUFFLE" ||
-
-        state ===
-        "COLLAPSING" ||
-
-        state ===
-        "SINGULARITY" ||
-
-        state ===
-        "EXPLOSION"
+        state === "SHUFFLE" ||
+        state === "COLLAPSING" ||
+        state === "SINGULARITY" ||
+        state === "EXPLOSION"
     ) {
 
         return;
@@ -893,16 +856,14 @@ update(
 
 
     /*
-     * Only normal states update
-     * from logical base positions.
+     * Only normal runtime states
+     * are allowed to rebuild visible
+     * particle positions.
      */
 
     if (
-        state !==
-        "STABLE" &&
-
-        state !==
-        "SUMMONING"
+        state !== "STABLE" &&
+        state !== "SUMMONING"
     ) {
 
         return;
@@ -958,9 +919,7 @@ update(
             Math.sin(
 
                 time * 0.0004 +
-
                 particlePhase
-
             );
 
 
@@ -973,9 +932,7 @@ update(
             Math.cos(
 
                 time * 0.00035 +
-
                 particlePhase
-
             );
 
 
@@ -988,9 +945,7 @@ update(
             Math.sin(
 
                 time * 0.0003 +
-
                 particlePhase
-
             );
     }
 
@@ -1029,6 +984,11 @@ beginShuffle() {
             .array;
 
 
+    /*
+     * Save exactly what the user
+     * currently sees.
+     */
+
     this.shuffleStartPositions =
         new Float32Array(
             positions
@@ -1054,10 +1014,8 @@ beginShuffle() {
         let x =
             Math.random() * 2 - 1;
 
-
         let y =
             Math.random() * 2 - 1;
-
 
         let z =
             Math.random() * 2 - 1;
@@ -1076,14 +1034,17 @@ beginShuffle() {
         x /=
             length;
 
-
         y /=
             length;
-
 
         z /=
             length;
 
+
+        /*
+         * Large enough to visibly
+         * fly through the camera.
+         */
 
         const distance =
             0.5 +
@@ -1093,30 +1054,29 @@ beginShuffle() {
         this.shuffleTargets[n] =
 
             positions[n] +
-
-            x *
-            distance;
+            x * distance;
 
 
         this.shuffleTargets[n + 1] =
 
             positions[n + 1] +
-
-            y *
-            distance;
+            y * distance;
 
 
         this.shuffleTargets[n + 2] =
 
             positions[n + 2] +
-
-            z *
-            distance;
+            z * distance;
     }
 
 
     this.data.state =
         "SHUFFLE";
+
+
+    console.log(
+        "[ParticleSystem] SHUFFLE BEGIN"
+    );
 
 
     return {
@@ -1126,7 +1086,6 @@ beginShuffle() {
 
         target:
             this.shuffleTargets
-
     };
 }
 
@@ -1231,13 +1190,9 @@ applyShuffle(
  * FINISH SHUFFLE
  * =====================================================
  *
- * IMPORTANT:
- *
  * Shuffle is temporary.
  *
- * It does NOT modify data.positions.
- *
- * This keeps the generated nebula intact.
+ * The generated nebula remains unchanged.
  */
 
 finishShuffle() {
@@ -1252,9 +1207,7 @@ finishShuffle() {
 
 
     /*
-     * Return to logical base.
-     *
-     * The shuffle is visual only.
+     * Restore the generated nebula.
      */
 
     this.resetVisibleToBase();
@@ -1319,7 +1272,9 @@ resetVisibleToBase() {
  * COLLAPSE
  * =====================================================
  *
- * 0 = normal
+ * progress:
+ *
+ * 0 = original nebula
  * 1 = singularity
  */
 
@@ -1363,7 +1318,7 @@ applyCollapse(
 
 
     const base =
-        this.data.positions;
+        this.originalPositions;
 
 
     this.data.state =
@@ -1386,21 +1341,15 @@ applyCollapse(
 
 
         positions[n] =
-
-            base[n] *
-            power;
+            base[n] * power;
 
 
         positions[n + 1] =
-
-            base[n + 1] *
-            power;
+            base[n + 1] * power;
 
 
         positions[n + 2] =
-
-            base[n + 2] *
-            power;
+            base[n + 2] * power;
     }
 
 
@@ -1450,6 +1399,11 @@ setSingularity() {
 
     this.data.state =
         "SINGULARITY";
+
+
+    console.log(
+        "[ParticleSystem] SINGULARITY"
+    );
 }
 
 
@@ -1464,7 +1418,8 @@ prepareExplosion(
 ) {
 
     if (
-        !this.data
+        !this.data ||
+        !this.originalPositions
     ) {
 
         return;
@@ -1490,13 +1445,14 @@ prepareExplosion(
         );
 
 
+    /*
+     * Determine radius of the
+     * generated nebula.
+     */
+
     let maxRadius =
         1;
 
-
-    /*
-     * Calculate original nebula radius.
-     */
 
     for (
         let i = 0;
@@ -1511,10 +1467,8 @@ prepareExplosion(
         const x =
             this.originalPositions[n];
 
-
         const y =
             this.originalPositions[n + 1];
-
 
         const z =
             this.originalPositions[n + 2];
@@ -1539,8 +1493,7 @@ prepareExplosion(
 
 
     this.explosionRadius =
-        maxRadius *
-        2.2;
+        maxRadius * 2.2;
 
 
     /*
@@ -1560,10 +1513,8 @@ prepareExplosion(
         let x =
             this.originalPositions[n];
 
-
         let y =
             this.originalPositions[n + 1];
-
 
         let z =
             this.originalPositions[n + 2];
@@ -1580,22 +1531,19 @@ prepareExplosion(
 
 
         /*
-         * Center particles receive
+         * Center particles need
          * a random direction.
          */
 
         if (
-            length <
-            0.000001
+            length < 0.000001
         ) {
 
             x =
                 Math.random() * 2 - 1;
 
-
             y =
                 Math.random() * 2 - 1;
-
 
             z =
                 Math.random() * 2 - 1;
@@ -1603,31 +1551,28 @@ prepareExplosion(
 
 
         /*
-         * Add controlled randomness.
+         * Controlled randomness.
          */
 
         x +=
             (
                 Math.random() -
                 0.5
-            ) *
-            0.35;
+            ) * 0.35;
 
 
         y +=
             (
                 Math.random() -
                 0.5
-            ) *
-            0.35;
+            ) * 0.35;
 
 
         z +=
             (
                 Math.random() -
                 0.5
-            ) *
-            0.35;
+            ) * 0.35;
 
 
         const directionLength =
@@ -1641,26 +1586,25 @@ prepareExplosion(
 
 
         this.explosionDirections[n] =
-
-            x /
-            directionLength;
+            x / directionLength;
 
 
         this.explosionDirections[n + 1] =
-
-            y /
-            directionLength;
+            y / directionLength;
 
 
         this.explosionDirections[n + 2] =
-
-            z /
-            directionLength;
+            z / directionLength;
     }
 
 
     this.data.state =
         "EXPLOSION";
+
+
+    console.log(
+        "[ParticleSystem] EXPLOSION PREPARED"
+    );
 }
 
 
@@ -1668,6 +1612,8 @@ prepareExplosion(
  * =====================================================
  * EXPLOSION
  * =====================================================
+ *
+ * progress:
  *
  * 0 = singularity
  * 1 = maximum burst
@@ -1743,38 +1689,33 @@ explode(
         const directionX =
             directions[n];
 
-
         const directionY =
             directions[n + 1];
-
 
         const directionZ =
             directions[n + 2];
 
 
         /*
-         * Stable deterministic variation.
-         *
-         * Always positive.
+         * Deterministic particle variation.
          */
 
         const randomSeed =
             Math.sin(
                 i * 12.9898
-            ) *
-            43758.5453;
+            ) * 43758.5453;
 
 
         const variation =
             0.85 +
+
             (
                 Math.abs(
                     randomSeed -
                     Math.floor(
                         randomSeed
                     )
-                ) *
-                0.35
+                ) * 0.35
             );
 
 
@@ -1785,19 +1726,16 @@ explode(
 
 
         positions[n] =
-
             directionX *
             distance;
 
 
         positions[n + 1] =
-
             directionY *
             distance;
 
 
         positions[n + 2] =
-
             directionZ *
             distance;
     }
@@ -1831,16 +1769,23 @@ finishExplosion() {
         null;
 
 
-    this.data.state =
-        "STABLE";
+    this.explosionStrength =
+        1;
+
+
+    this.explosionRadius =
+        1;
 
 
     /*
-     * Visible particles return to the
-     * logical nebula on the next update.
+     * Restore generated nebula.
      */
 
     this.resetVisibleToBase();
+
+
+    this.data.state =
+        "STABLE";
 
 
     console.log(
@@ -1873,7 +1818,7 @@ setOpacity(
         .value =
 
         clamp(
-            value,
+            Number(value) || 0,
             0,
             1
         );
@@ -1905,21 +1850,19 @@ setBrightness(
 
         Math.max(
             0,
-            Number(
-                value
-            ) || 0
+            Number(value) || 0
         );
 }
 
 
 /*
  * =====================================================
- * RESET
+ * RESET POSITIONS
  * =====================================================
  *
- * Restores the ORIGINAL generated nebula.
+ * Hard recovery.
  *
- * This is the hard recovery state.
+ * Restores the generated nebula exactly.
  */
 
 resetPositions() {
@@ -1935,7 +1878,7 @@ resetPositions() {
 
 
     /*
-     * Restore logical base.
+     * Restore logical data.
      */
 
     this.data.positions =
@@ -1945,7 +1888,7 @@ resetPositions() {
 
 
     /*
-     * Restore visible positions.
+     * Restore geometry.
      */
 
     const positionAttribute =
@@ -1973,18 +1916,14 @@ resetPositions() {
     this.shuffleStartPositions =
         null;
 
-
     this.shuffleTargets =
         null;
-
 
     this.explosionDirections =
         null;
 
-
     this.explosionStrength =
         1;
-
 
     this.explosionRadius =
         1;
@@ -2012,8 +1951,10 @@ resetPositions() {
 
 getState() {
 
-    return this.data?.state ||
-        "UNKNOWN";
+    return (
+        this.data?.state ||
+        "UNKNOWN"
+    );
 }
 
 
@@ -2042,14 +1983,11 @@ dispose() {
     this.shuffleStartPositions =
         null;
 
-
     this.shuffleTargets =
         null;
 
-
     this.explosionDirections =
         null;
-
 
     this.originalPositions =
         null;
@@ -2058,14 +1996,11 @@ dispose() {
     this.geometry =
         null;
 
-
     this.material =
         null;
 
-
     this.points =
         null;
-
 
     this.data =
         null;
@@ -2099,7 +2034,6 @@ return Math.max(
         max,
         value
     )
-
 );
 
 }
@@ -2120,7 +2054,6 @@ return (
     ) *
 
     t
-
 );
 
 }
@@ -2149,7 +2082,6 @@ return (
         1 - t,
         3
     )
-
 );
 
 }
@@ -2165,11 +2097,11 @@ return (
         ? 2 * t * t
 
         : 1 -
+
           Math.pow(
               -2 * t + 2,
               2
           ) / 2
-
 );
 
 }
