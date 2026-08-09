@@ -8,9 +8,7 @@ export async function generateNebula(
     imageSource
 ) {
 
-    if (
-        !THREE
-    ) {
+    if (!THREE) {
 
         throw new Error(
             "THREE is required."
@@ -18,34 +16,39 @@ export async function generateNebula(
     }
 
 
-    if (
-        !imageSource
-    ) {
+    let image = null;
 
-        throw new Error(
-            "Image source is empty."
-        );
+
+    /*
+     * =====================================================
+     * OPTIONAL IMAGE
+     * =====================================================
+     */
+
+    if (imageSource) {
+
+        try {
+
+            image =
+                await loadImage(
+                    imageSource
+                );
+
+        } catch (error) {
+
+            console.warn(
+                "[Nebula] Image failed, using procedural source:",
+                error
+            );
+
+            image = null;
+        }
     }
 
 
     /*
      * =====================================================
-     * LOAD IMAGE
-     * =====================================================
-     */
-
-    const image =
-        await loadImage(
-            imageSource
-        );
-
-
-    /*
-     * =====================================================
-     * IMAGE SAMPLING SURFACE
-     *
-     * This canvas is NEVER displayed.
-     * It only extracts pixel colors.
+     * IMAGE SAMPLING
      * =====================================================
      */
 
@@ -53,53 +56,54 @@ export async function generateNebula(
         96;
 
 
-    const canvas =
-        document.createElement(
-            "canvas"
-        );
+    let pixels = null;
 
 
-    canvas.width =
-        size;
+    if (image) {
 
-    canvas.height =
-        size;
-
-
-    const ctx =
-        canvas.getContext(
-            "2d",
-            {
-                willReadFrequently:
-                    true
-            }
-        );
+        const canvas =
+            document.createElement(
+                "canvas"
+            );
 
 
-    if (!ctx) {
+        canvas.width =
+            size;
 
-        throw new Error(
-            "2D canvas context unavailable."
-        );
+        canvas.height =
+            size;
+
+
+        const ctx =
+            canvas.getContext(
+                "2d",
+                {
+                    willReadFrequently:
+                        true
+                }
+            );
+
+
+        if (ctx) {
+
+            ctx.drawImage(
+                image,
+                0,
+                0,
+                size,
+                size
+            );
+
+
+            pixels =
+                ctx.getImageData(
+                    0,
+                    0,
+                    size,
+                    size
+                ).data;
+        }
     }
-
-
-    ctx.drawImage(
-        image,
-        0,
-        0,
-        size,
-        size
-    );
-
-
-    const pixels =
-        ctx.getImageData(
-            0,
-            0,
-            size,
-            size
-        ).data;
 
 
     /*
@@ -145,11 +149,6 @@ export async function generateNebula(
         );
 
 
-    /*
-     * Target is kept as a separate
-     * mathematical reference.
-     */
-
     const target =
         new Float32Array(
             count * 3
@@ -158,7 +157,7 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * GENERATE PARTICLES
+     * GENERATE
      * =====================================================
      */
 
@@ -168,127 +167,133 @@ export async function generateNebula(
         i++
     ) {
 
+        const n =
+            i * 3;
+
+
+        let r;
+        let g;
+        let b;
+
+
         /*
-         * -------------------------------------------------
-         * RANDOM PIXEL
-         * -------------------------------------------------
+         * =================================================
+         * IMAGE COLOR
+         * =================================================
          */
 
-        const px =
-            Math.floor(
-                Math.random() * size
-            );
+        if (pixels) {
+
+            const px =
+                Math.floor(
+                    Math.random() * size
+                );
+
+            const py =
+                Math.floor(
+                    Math.random() * size
+                );
+
+            const p =
+                (
+                    py * size +
+                    px
+                ) * 4;
 
 
-        const py =
-            Math.floor(
-                Math.random() * size
-            );
+            r =
+                pixels[p] / 255;
+
+            g =
+                pixels[p + 1] / 255;
+
+            b =
+                pixels[p + 2] / 255;
+
+        } else {
+
+            /*
+             * Procedural fallback colors.
+             */
+
+            const hue =
+                Math.random();
 
 
-        const p =
+            r =
+                0.15 +
+                hue * 0.65;
+
+            g =
+                0.20 +
+                Math.random() * 0.55;
+
+            b =
+                0.35 +
+                Math.random() * 0.65;
+        }
+
+
+        /*
+         * =================================================
+         * POSITION
+         * =================================================
+         */
+
+        const angle =
+            Math.random() *
+            Math.PI *
+            2;
+
+
+        const radius =
+            Math.pow(
+                Math.random(),
+                0.55
+            ) * 120;
+
+
+        const vertical =
             (
-                py * size +
-                px
-            ) * 4;
-
-
-        let r =
-            pixels[p] / 255;
-
-
-        let g =
-            pixels[p + 1] / 255;
-
-
-        let b =
-            pixels[p + 2] / 255;
-
-
-        /*
-         * -------------------------------------------------
-         * BASE IMAGE COORDINATES
-         * -------------------------------------------------
-         */
-
-        const u =
-            (px / (size - 1)) -
-            0.5;
-
-
-        const v =
-            (py / (size - 1)) -
-            0.5;
-
-
-        /*
-         * -------------------------------------------------
-         * 3D DEFORMATION
-         * -------------------------------------------------
-         */
-
-        const radial =
-            Math.sqrt(
-                u * u +
-                v * v
-            );
+                Math.random() -
+                0.5
+            ) * 80;
 
 
         const irregular =
             noise3(
-                u * 8,
-                v * 8,
-                i * 0.0007
+                i * 0.017,
+                radius * 0.03,
+                angle
             );
-
-
-        const depthNoise =
-            (
-                Math.random() -
-                0.5
-            ) * 45;
-
-
-        const spiral =
-            radial * 15 +
-            irregular * 4;
 
 
         let x =
-            u * 95;
+            Math.cos(angle) *
+            radius;
 
 
         let y =
-            -v * 70;
+            vertical;
 
 
         let z =
-            depthNoise +
-            Math.sin(
-                spiral
-            ) * 8;
+            Math.sin(angle) *
+            radius;
 
 
-        /*
-         * -------------------------------------------------
-         * DEPTH LAYERS
-         * -------------------------------------------------
-         */
+        x +=
+            irregular * 25;
 
-        const layer =
-            Math.floor(
-                Math.random() * 9
-            );
-
+        y +=
+            irregular * 18;
 
         z +=
-            (layer - 4) * 4.5;
+            irregular * 25;
 
 
         /*
-         * -------------------------------------------------
-         * ORGANIC DISTORTION
-         * -------------------------------------------------
+         * Organic deformation.
          */
 
         x +=
@@ -313,76 +318,17 @@ export async function generateNebula(
 
 
         /*
-         * -------------------------------------------------
-         * SPARSE ZONES
-         * -------------------------------------------------
+         * Sparse outer region.
          */
 
-        const density =
-            Math.random();
-
-
         if (
-            density < 0.25
+            Math.random() < 0.25
         ) {
 
             x *= 1.5;
-
             y *= 1.45;
-
             z *= 1.25;
         }
-
-
-        /*
-         * -------------------------------------------------
-         * RANDOM LOCAL ROTATION
-         * -------------------------------------------------
-         */
-
-        const randomAngle =
-            Math.random() *
-            Math.PI *
-            2;
-
-
-        const cos =
-            Math.cos(
-                randomAngle
-            );
-
-
-        const sin =
-            Math.sin(
-                randomAngle
-            );
-
-
-        const rx =
-            x * cos -
-            y * sin;
-
-
-        const ry =
-            x * sin +
-            y * cos;
-
-
-        x =
-            rx;
-
-        y =
-            ry;
-
-
-        /*
-         * -------------------------------------------------
-         * POSITION
-         * -------------------------------------------------
-         */
-
-        const n =
-            i * 3;
 
 
         positions[n] =
@@ -395,12 +341,6 @@ export async function generateNebula(
             z;
 
 
-        /*
-         * -------------------------------------------------
-         * OBSERVATION TARGET
-         * -------------------------------------------------
-         */
-
         target[n] =
             x;
 
@@ -412,14 +352,9 @@ export async function generateNebula(
 
 
         /*
-         * -------------------------------------------------
-         * COLOR
-         * -------------------------------------------------
-         */
-
-        /*
-         * Slightly lift dark pixels so the universe
-         * does not become completely invisible.
+         * =================================================
+         * COLOR LIFT
+         * =================================================
          */
 
         const brightness =
@@ -431,11 +366,11 @@ export async function generateNebula(
 
 
         if (
-            brightness < 0.04
+            brightness < 0.08
         ) {
 
             const lift =
-                0.04 -
+                0.08 -
                 brightness;
 
 
@@ -445,13 +380,11 @@ export async function generateNebula(
                     r + lift
                 );
 
-
             g =
                 Math.min(
                     1,
                     g + lift
                 );
-
 
             b =
                 Math.min(
@@ -472,16 +405,14 @@ export async function generateNebula(
 
 
         /*
-         * -------------------------------------------------
-         * PARTICLE SIZE
-         * -------------------------------------------------
+         * =================================================
+         * SIZE
+         * =================================================
          */
 
         sizes[i] =
             CONFIG.PARTICLES.MIN_SIZE +
-
             Math.random() *
-
             (
                 CONFIG.PARTICLES.MAX_SIZE -
                 CONFIG.PARTICLES.MIN_SIZE
@@ -489,9 +420,9 @@ export async function generateNebula(
 
 
         /*
-         * -------------------------------------------------
+         * =================================================
          * DRIFT
-         * -------------------------------------------------
+         * =================================================
          */
 
         drift[n] =
@@ -515,12 +446,6 @@ export async function generateNebula(
             ) * 0.015;
 
 
-        /*
-         * -------------------------------------------------
-         * PHASE
-         * -------------------------------------------------
-         */
-
         phase[i] =
             Math.random() *
             Math.PI *
@@ -530,7 +455,7 @@ export async function generateNebula(
 
     /*
      * =====================================================
-     * HIDDEN OBSERVATION PARAMETERS
+     * OBSERVATION
      * =====================================================
      */
 
@@ -542,13 +467,11 @@ export async function generateNebula(
                 Math.PI
             ),
 
-
         pitch:
             randomRange(
                 -Math.PI * 0.45,
                 Math.PI * 0.45
             ),
-
 
         roll:
             randomRange(
@@ -556,34 +479,19 @@ export async function generateNebula(
                 Math.PI
             ),
 
-
         distance:
-            35 *
+            110 *
             randomRange(
                 0.90,
                 1.10
             ),
 
-
         position:
             new THREE.Vector3(
-
-                randomRange(
-                    -5,
-                    5
-                ),
-
-                randomRange(
-                    -5,
-                    5
-                ),
-
-                randomRange(
-                    -5,
-                    5
-                )
+                0,
+                0,
+                0
             ),
-
 
         scale:
             randomRange(
@@ -592,29 +500,6 @@ export async function generateNebula(
             )
     };
 
-
-    /*
-     * =====================================================
-     * RELEASE IMAGE RESOURCES
-     * =====================================================
-     */
-
-    try {
-
-        image.onload =
-            null;
-
-        image.onerror =
-            null;
-
-    } catch (_) {}
-
-
-    /*
-     * =====================================================
-     * RETURN NEBULA
-     * =====================================================
-     */
 
     return {
 
@@ -650,7 +535,7 @@ export async function generateNebula(
             new THREE.Vector3(),
 
         originalImageId:
-            imageSource
+            imageSource || null
     };
 }
 
@@ -704,7 +589,7 @@ function loadImage(
 
 /*
  * =========================================================
- * RANDOM RANGE
+ * RANDOM
  * =========================================================
  */
 
@@ -717,7 +602,8 @@ function randomRange(
         a +
         Math.random() *
         (
-            b - a
+            b -
+            a
         )
     );
 }
@@ -725,7 +611,7 @@ function randomRange(
 
 /*
  * =========================================================
- * RANDOM ROTATION MODE
+ * ROTATION
  * =========================================================
  */
 
@@ -734,12 +620,10 @@ function randomRotationMode() {
     const modes = [
 
         "ROTATE",
-
         "FLIP",
-
         "STOP",
-
         "DEFORM"
+
     ];
 
 
@@ -754,7 +638,7 @@ function randomRotationMode() {
 
 /*
  * =========================================================
- * LIGHTWEIGHT 3D NOISE
+ * NOISE
  * =========================================================
  */
 
