@@ -1,926 +1,1550 @@
 /*
+ * =========================================================
+ * PARTICLE UNIVERSE
+ * GLOBAL STATE
+ *
+ * Central Runtime State
+ *
+ * ENTRY
+ *   ↓
+ * EXPLORATION
+ *   ↓
+ * OBSERVING
+ *   ↓
+ * OBSERVATION_EVENT
+ *   ↓
+ * COLLAPSING
+ *   ↓
+ * SINGULARITY
+ *   ↓
+ * EXPLOSION
+ *   ↓
+ * EXPLORATION
+ *
+ * IMPORTANT
+ * ---------------------------------------------------------
+ * This module ONLY stores runtime state.
+ *
+ * It does NOT:
+ *
+ * - control particles
+ * - control camera
+ * - control audio
+ * - run animation
+ * - calculate observation score
+ * - execute observation events
+ * - perform particle shuffle
+ *
+ * Other modules read/write STATE through
+ * the helper functions exported here.
+ * =========================================================
+ */
 
-* =========================================================
-* PARTICLE UNIVERSE
-* GLOBAL STATE
-* 
-* Central runtime state for the Particle Universe.
-* 
-* State flow:
-* 
-* ENTRY
-* ↓
-* EXPLORATION
-* ↓
-* OBSERVATION_EVENT
-* ↓
-* COLLAPSING
-* ↓
-* SINGULARITY
-* ↓
-* EXPLOSION
-* ↓
-* EXPLORATION
-* 
-* This module contains GLOBAL application state only.
-* 
-* Particle geometry state is owned by ParticleSystem.
-* 
-* This module must NOT directly manipulate:
-* - THREE.js
-* - particles
-* - camera
-* - audio
-* 
-* It only describes what the application is doing.
-* =========================================================
-  */
 
 /*
+ * =========================================================
+ * PHASES
+ * =========================================================
+ *
+ * Centralized phase names.
+ *
+ * Prevents random string mismatches between modules.
+ * =========================================================
+ */
 
-* =========================================================
-* TIME
-* =========================================================
-  */
+export const PHASE = Object.freeze({
 
-function now() {
+    ENTRY:
+        "ENTRY",
 
-if (
-    typeof performance !==
-    "undefined" &&
-    typeof performance.now ===
-    "function"
-) {
+    SUMMONING:
+        "SUMMONING",
 
-    return performance.now();
-}
+    EXPLORATION:
+        "EXPLORATION",
 
+    OBSERVING:
+        "OBSERVING",
 
-return Date.now();
+    OBSERVATION_EVENT:
+        "OBSERVATION_EVENT",
 
-}
+    COLLAPSING:
+        "COLLAPSING",
+
+    SINGULARITY:
+        "SINGULARITY",
+
+    EXPLOSION:
+        "EXPLOSION",
+
+    SHUFFLE:
+        "SHUFFLE",
+
+    AMBIENT:
+        "AMBIENT"
+});
+
 
 /*
-
-* =========================================================
-* GLOBAL STATE
-* =========================================================
-  */
+ * =========================================================
+ * RUNTIME STATE
+ * =========================================================
+ */
 
 export const STATE = {
 
-/*
- * =====================================================
- * ENTRY
- * =====================================================
- */
+    /*
+     * =====================================================
+     * APPLICATION
+     * =====================================================
+     */
 
-entered:
-    false,
+    entered:
+        false,
 
+    rendererMode:
+        "none",
 
-/*
- * Current renderer mode.
- *
- * Example:
- *
- * "none"
- * "three"
- */
-
-rendererMode:
-    "none",
+    phase:
+        PHASE.ENTRY,
 
 
-/*
- * =====================================================
- * APPLICATION PHASE
- * =====================================================
- *
- * This is the high-level application state.
- *
- * ParticleSystem has its own particle state.
- *
- */
+    /*
+     * =====================================================
+     * CONTROLS
+     * =====================================================
+     *
+     * controlsLocked
+     *     General movement/input lock.
+     *
+     * observationLocked
+     *     Observation-event-specific lock.
+     *
+     * These are intentionally separate.
+     * =====================================================
+     */
 
-phase:
-    "ENTRY",
+    controlsLocked:
+        false,
 
-
-/*
- * =====================================================
- * OBSERVATION EVENT
- * =====================================================
- */
-
-/*
- * True while the complete observation event
- * is currently executing.
- */
-
-observationEvent:
-    false,
+    observationLocked:
+        false,
 
 
-/*
- * True while user interaction is forbidden
- * because an observation event owns the scene.
- */
+    /*
+     * =====================================================
+     * OBSERVATION
+     * =====================================================
+     */
 
-observationLocked:
-    false,
+    observationStarted:
+        false,
 
+    observationComplete:
+        false,
 
-/*
- * Controls-only lock.
- *
- * This is intentionally separate from
- * observationLocked.
- */
+    observationEvent:
+        false,
 
-controlsLocked:
-    false,
+    observationProgress:
+        0,
 
+    observationScore:
+        0,
 
-/*
- * Whether the observation sequence has
- * successfully completed at least once.
- */
+    observationValid:
+        false,
 
-observationComplete:
-    false,
+    observationHold:
+        false,
 
+    observationHoldTime:
+        0,
 
-/*
- * Whether the observation sequence has
- * started at least once.
- */
+    observationStartedAt:
+        0,
 
-observationStarted:
-    false,
-
-
-/*
- * =====================================================
- * AMBIENT / IDLE
- * =====================================================
- */
-
-ambient:
-    false,
+    observationCompletedAt:
+        0,
 
 
-idleTime:
-    0,
+    /*
+     * =====================================================
+     * AMBIENT
+     * =====================================================
+     */
+
+    ambient:
+        false,
+
+    ambientStartedAt:
+        0,
 
 
-lastInteraction:
-    now(),
+    /*
+     * =====================================================
+     * PARTICLE OPERATIONS
+     * =====================================================
+     */
+
+    shuffle:
+        false,
+
+    shuffleStartedAt:
+        0,
+
+    explosion:
+        false,
+
+    explosionStartedAt:
+        0,
 
 
-/*
- * =====================================================
- * SHUFFLE
- * =====================================================
- *
- * This represents the application-level
- * shuffle operation.
- *
- * ParticleSystem.data.state remains the
- * authoritative particle state.
- */
+    /*
+     * =====================================================
+     * IDLE
+     * =====================================================
+     */
 
-shuffle:
-    false,
+    idleTime:
+        0,
+
+    lastInteraction:
+        getNow(),
 
 
-/*
- * =====================================================
- * EXPLOSION
- * =====================================================
- *
- * Application-level indicator.
- *
- * ParticleSystem.data.state remains authoritative
- * for actual particle geometry state.
- */
+    /*
+     * =====================================================
+     * UNIVERSE
+     * =====================================================
+     */
 
-explosion:
-    false,
+    activeNebula:
+        null,
+
+    nebulaId:
+        null,
 
 
-/*
- * =====================================================
- * ACTIVE NEBULA
- * =====================================================
- */
+    /*
+     * =====================================================
+     * CUSTOM IMAGES
+     * =====================================================
+     *
+     * Stores user-provided image sources.
+     *
+     * Actual image processing belongs to
+     * the NebulaGenerator / image system.
+     * =====================================================
+     */
 
-activeNebula:
-    null,
+    customImages:
+        [],
 
 
-/*
- * =====================================================
- * CUSTOM IMAGES
- * =====================================================
- */
+    /*
+     * =====================================================
+     * RUNTIME METADATA
+     * =====================================================
+     */
 
-customImages:
-    []
+    generation:
+        0,
 
+    restartCount:
+        0
 };
 
-/*
-
-* =========================================================
-* VALID PHASES
-* =========================================================
-  */
-
-const VALID_PHASES = new Set([
-
-"ENTRY",
-
-"EXPLORATION",
-
-"OBSERVATION_EVENT",
-
-"COLLAPSING",
-
-"SINGULARITY",
-
-"EXPLOSION"
-
-]);
 
 /*
-
-* =========================================================
-* SET PHASE
-* =========================================================
-* 
-* Central phase transition function.
-* 
-* This prevents random modules from directly
-* changing phase-related flags inconsistently.
-* =========================================================
-  */
-
-export function setPhase(
-next
-) {
-
-if (
-    typeof next !==
-    "string"
-) {
-
-    console.warn(
-        "[STATE] Invalid phase:",
-        next
-    );
-
-    return false;
-}
-
-
-if (
-    !VALID_PHASES.has(
-        next
-    )
-) {
-
-    console.warn(
-        "[STATE] Unknown phase:",
-        next
-    );
-
-    return false;
-}
-
-
-STATE.phase =
-    next;
-
-
-/*
- * =====================================================
- * SYNCHRONIZE HIGH-LEVEL FLAGS
- * =====================================================
+ * =========================================================
+ * GET TIME
+ * =========================================================
+ *
+ * Defensive browser-safe timer.
+ * =========================================================
  */
 
-switch (
+function getNow() {
+
+    if (
+        typeof performance !==
+        "undefined" &&
+
+        typeof performance.now ===
+        "function"
+    ) {
+
+        return performance.now();
+    }
+
+
+    return Date.now();
+}
+
+
+/*
+ * =========================================================
+ * SET PHASE
+ * =========================================================
+ */
+
+export function setPhase(
     next
 ) {
 
-    /*
-     * -------------------------------------------------
-     * ENTRY
-     * -------------------------------------------------
-     */
+    if (
+        typeof next !==
+        "string"
+    ) {
 
-    case "ENTRY":
+        console.warn(
+            "[STATE] INVALID PHASE:",
+            next
+        );
 
-        STATE.observationEvent =
-            false;
-
-        STATE.observationLocked =
-            false;
-
-        STATE.controlsLocked =
-            false;
-
-        STATE.shuffle =
-            false;
-
-        STATE.explosion =
-            false;
-
-        break;
+        return false;
+    }
 
 
     /*
-     * -------------------------------------------------
-     * EXPLORATION
-     * -------------------------------------------------
+     * Allow only known phases.
      */
 
-    case "EXPLORATION":
-
-        STATE.observationEvent =
-            false;
-
-        STATE.observationLocked =
-            false;
-
-        STATE.controlsLocked =
-            false;
-
-        STATE.explosion =
-            false;
-
-        break;
+    const validPhase =
+        Object.values(
+            PHASE
+        ).includes(
+            next
+        );
 
 
-    /*
-     * -------------------------------------------------
-     * OBSERVATION EVENT
-     * -------------------------------------------------
-     */
+    if (
+        !validPhase
+    ) {
 
-    case "OBSERVATION_EVENT":
+        console.warn(
+            "[STATE] UNKNOWN PHASE:",
+            next
+        );
 
-        STATE.observationEvent =
-            true;
-
-        STATE.observationLocked =
-            true;
-
-        STATE.controlsLocked =
-            true;
-
-        break;
+        return false;
+    }
 
 
-    /*
-     * -------------------------------------------------
-     * COLLAPSING
-     * -------------------------------------------------
-     */
-
-    case "COLLAPSING":
-
-        STATE.observationEvent =
-            true;
-
-        STATE.observationLocked =
-            true;
-
-        STATE.controlsLocked =
-            true;
-
-        STATE.explosion =
-            false;
-
-        break;
+    STATE.phase =
+        next;
 
 
-    /*
-     * -------------------------------------------------
-     * SINGULARITY
-     * -------------------------------------------------
-     */
-
-    case "SINGULARITY":
-
-        STATE.observationEvent =
-            true;
-
-        STATE.observationLocked =
-            true;
-
-        STATE.controlsLocked =
-            true;
-
-        STATE.explosion =
-            false;
-
-        break;
-
-
-    /*
-     * -------------------------------------------------
-     * EXPLOSION
-     * -------------------------------------------------
-     */
-
-    case "EXPLOSION":
-
-        STATE.observationEvent =
-            true;
-
-        STATE.observationLocked =
-            true;
-
-        STATE.controlsLocked =
-            true;
-
-        STATE.explosion =
-            true;
-
-        break;
-
+    return true;
 }
 
-
-console.log(
-    "[STATE] PHASE:",
-    STATE.phase
-);
-
-
-return true;
-
-}
 
 /*
-
-* =========================================================
-* REGISTER INTERACTION
-* =========================================================
-* 
-* Called by mouse / touch / keyboard / camera controls.
-* 
-* Interaction during an observation event is ignored.
-* =========================================================
-  */
+ * =========================================================
+ * REGISTER USER INTERACTION
+ * =========================================================
+ */
 
 export function registerInteraction() {
 
+    const now =
+        getNow();
+
+
+    STATE.lastInteraction =
+        now;
+
+
+    STATE.idleTime =
+        0;
+
+
+    /*
+     * User activity exits ambient mode.
+     *
+     * This does NOT interrupt observation events.
+     */
+
+    if (
+        STATE.ambient
+    ) {
+
+        STATE.ambient =
+            false;
+
+
+        STATE.ambientStartedAt =
+            0;
+
+
+        /*
+         * Return to exploration only when
+         * no higher-priority operation is active.
+         */
+
+        if (
+            !STATE.observationEvent &&
+            !STATE.shuffle &&
+            !STATE.explosion &&
+            !STATE.observationComplete
+        ) {
+
+            setPhase(
+                PHASE.EXPLORATION
+            );
+        }
+    }
+}
+
+
 /*
- * Observation owns the scene.
- *
- * Do not allow interaction events to
- * modify idle state during the event.
+ * =========================================================
+ * UPDATE IDLE TIME
+ * =========================================================
  */
-
-if (
-    STATE.observationLocked ||
-    STATE.controlsLocked
-) {
-
-    return false;
-}
-
-
-STATE.lastInteraction =
-    now();
-
-
-STATE.idleTime =
-    0;
-
-
-/*
- * Any user interaction means
- * the scene is no longer ambient.
- */
-
-if (
-    STATE.ambient
-) {
-
-    STATE.ambient =
-        false;
-}
-
-
-return true;
-
-}
-
-/*
-
-* =========================================================
-* UPDATE IDLE
-* =========================================================
-  */
 
 export function updateIdle(
-currentTime
+    now = getNow()
 ) {
 
-const current =
-    Number.isFinite(
+    const current =
         Number(
-            currentTime
+            now
+        );
+
+
+    if (
+        !Number.isFinite(
+            current
         )
-    )
-        ? Number(
-            currentTime
-        )
-        : now();
+    ) {
+
+        return STATE.idleTime;
+    }
 
 
-STATE.idleTime =
-    Math.max(
-        0,
-        current -
-        STATE.lastInteraction
-    );
+    STATE.idleTime =
+        Math.max(
+            0,
+            current -
+            STATE.lastInteraction
+        );
 
 
-return STATE.idleTime;
-
+    return STATE.idleTime;
 }
 
-/*
-
-* =========================================================
-* ENTER UNIVERSE
-* =========================================================
-* 
-* Convenience helper.
-* 
-* Main entry controller can call:
-* 
-* enterUniverse()
-* 
-* instead of manually modifying several flags.
-* =========================================================
-  */
-
-export function enterUniverse() {
-
-STATE.entered =
-    true;
-
-
-STATE.observationEvent =
-    false;
-
-
-STATE.observationLocked =
-    false;
-
-
-STATE.controlsLocked =
-    false;
-
-
-STATE.observationStarted =
-    false;
-
-
-STATE.observationComplete =
-    false;
-
-
-STATE.shuffle =
-    false;
-
-
-STATE.explosion =
-    false;
-
-
-STATE.ambient =
-    false;
-
-
-STATE.lastInteraction =
-    now();
-
-
-STATE.idleTime =
-    0;
-
-
-setPhase(
-    "EXPLORATION"
-);
-
-
-console.log(
-    "[STATE] UNIVERSE ENTERED"
-);
-
-}
 
 /*
-
-* =========================================================
-* BEGIN OBSERVATION
-* =========================================================
-* 
-* Called by the observation trigger.
-* =========================================================
-  */
-
-export function beginObservation() {
-
-/*
- * Already running.
+ * =========================================================
+ * START OBSERVATION
+ * =========================================================
+ *
+ * Called when the observer begins evaluating
+ * the current nebula.
+ * =========================================================
  */
 
-if (
-    STATE.observationEvent
-) {
+export function startObservation() {
 
-    return false;
+    if (
+        STATE.observationEvent
+    ) {
+
+        return false;
+    }
+
+
+    if (
+        STATE.observationComplete
+    ) {
+
+        return false;
+    }
+
+
+    STATE.observationStarted =
+        true;
+
+
+    STATE.observationProgress =
+        0;
+
+
+    STATE.observationScore =
+        0;
+
+
+    STATE.observationValid =
+        false;
+
+
+    STATE.observationHold =
+        false;
+
+
+    STATE.observationHoldTime =
+        0;
+
+
+    STATE.observationStartedAt =
+        getNow();
+
+
+    if (
+        !STATE.shuffle &&
+        !STATE.explosion
+    ) {
+
+        setPhase(
+            PHASE.OBSERVING
+        );
+    }
+
+
+    return true;
 }
 
 
 /*
- * Must already be inside the universe.
+ * =========================================================
+ * UPDATE OBSERVATION SCORE
+ * =========================================================
  */
 
-if (
-    !STATE.entered
+export function updateObservationScore(
+    score,
+    valid = false
 ) {
 
-    console.warn(
-        "[STATE] Cannot begin observation before entry."
-    );
+    const numericScore =
+        Number(
+            score
+        );
 
-    return false;
+
+    STATE.observationScore =
+        Number.isFinite(
+            numericScore
+        )
+            ? Math.max(
+                0,
+                Math.min(
+                    1,
+                    numericScore
+                )
+            )
+            : 0;
+
+
+    STATE.observationValid =
+        Boolean(
+            valid
+        );
+
+
+    return STATE.observationScore;
 }
 
-
-STATE.observationStarted =
-    true;
-
-
-STATE.observationComplete =
-    false;
-
-
-STATE.shuffle =
-    false;
-
-
-STATE.explosion =
-    false;
-
-
-setPhase(
-    "OBSERVATION_EVENT"
-);
-
-
-console.log(
-    "[STATE] OBSERVATION BEGIN"
-);
-
-
-return true;
-
-}
 
 /*
+ * =========================================================
+ * START OBSERVATION HOLD
+ * =========================================================
+ */
 
-* =========================================================
-* COMPLETE OBSERVATION
-* =========================================================
-  */
+export function startObservationHold() {
+
+    if (
+        !STATE.observationStarted ||
+        STATE.observationComplete ||
+        STATE.observationEvent
+    ) {
+
+        return false;
+    }
+
+
+    if (
+        STATE.observationHold
+    ) {
+
+        return true;
+    }
+
+
+    STATE.observationHold =
+        true;
+
+
+    STATE.observationHoldTime =
+        0;
+
+
+    return true;
+}
+
+
+/*
+ * =========================================================
+ * UPDATE OBSERVATION HOLD
+ * =========================================================
+ */
+
+export function updateObservationHold(
+    milliseconds
+) {
+
+    if (
+        !STATE.observationHold
+    ) {
+
+        return 0;
+    }
+
+
+    const value =
+        Number(
+            milliseconds
+        );
+
+
+    if (
+        Number.isFinite(
+            value
+        )
+    ) {
+
+        STATE.observationHoldTime =
+            Math.max(
+                0,
+                value
+            );
+    }
+
+
+    return STATE.observationHoldTime;
+}
+
+
+/*
+ * =========================================================
+ * CANCEL OBSERVATION HOLD
+ * =========================================================
+ */
+
+export function cancelObservationHold() {
+
+    STATE.observationHold =
+        false;
+
+
+    STATE.observationHoldTime =
+        0;
+}
+
+
+/*
+ * =========================================================
+ * COMPLETE OBSERVATION
+ * =========================================================
+ *
+ * Marks the hidden image observation as completed.
+ *
+ * This does NOT execute the collapse/explosion event.
+ * The Observation Event module owns that.
+ * =========================================================
+ */
 
 export function completeObservation() {
 
-STATE.observationComplete =
-    true;
+    if (
+        STATE.observationComplete
+    ) {
+
+        return false;
+    }
 
 
-STATE.observationEvent =
-    false;
+    STATE.observationComplete =
+        true;
 
 
-STATE.observationLocked =
-    false;
+    STATE.observationValid =
+        true;
 
 
-STATE.controlsLocked =
-    false;
+    STATE.observationProgress =
+        1;
 
 
-STATE.explosion =
-    false;
+    STATE.observationCompletedAt =
+        getNow();
 
 
-STATE.shuffle =
-    false;
+    cancelObservationHold();
 
 
-STATE.lastInteraction =
-    now();
-
-
-STATE.idleTime =
-    0;
-
-
-setPhase(
-    "EXPLORATION"
-);
-
-
-console.log(
-    "[STATE] OBSERVATION COMPLETE"
-);
-
+    return true;
 }
 
-/*
-
-* =========================================================
-* SET SHUFFLE STATE
-* =========================================================
-  */
-
-export function setShuffleState(
-active
-) {
-
-STATE.shuffle =
-    Boolean(
-        active
-    );
-
 
 /*
- * Shuffle should never
- * accidentally become an
- * observation event.
+ * =========================================================
+ * START OBSERVATION EVENT
+ * =========================================================
  */
 
-if (
-    active &&
-    STATE.observationEvent
-) {
+export function startObservationEvent() {
 
-    console.warn(
-        "[STATE] Shuffle blocked during observation."
+    if (
+        STATE.observationEvent
+    ) {
+
+        return false;
+    }
+
+
+    STATE.observationEvent =
+        true;
+
+
+    STATE.observationStarted =
+        true;
+
+
+    STATE.observationLocked =
+        true;
+
+
+    STATE.controlsLocked =
+        true;
+
+
+    setPhase(
+        PHASE.OBSERVATION_EVENT
     );
+
+
+    return true;
+}
+
+
+/*
+ * =========================================================
+ * END OBSERVATION EVENT
+ * =========================================================
+ */
+
+export function endObservationEvent() {
+
+    STATE.observationEvent =
+        false;
+
+
+    STATE.observationLocked =
+        false;
+
+
+    STATE.controlsLocked =
+        false;
+
+
+    STATE.observationProgress =
+        1;
+
+
+    setPhase(
+        PHASE.EXPLORATION
+    );
+}
+
+
+/*
+ * =========================================================
+ * START SHUFFLE
+ * =========================================================
+ */
+
+export function startShuffle() {
+
+    if (
+        STATE.shuffle
+    ) {
+
+        return false;
+    }
+
+
+    /*
+     * Shuffle must never run during
+     * observation event / explosion.
+     */
+
+    if (
+        STATE.observationEvent ||
+        STATE.explosion
+    ) {
+
+        return false;
+    }
+
+
+    STATE.shuffle =
+        true;
+
+
+    STATE.shuffleStartedAt =
+        getNow();
+
+
+    STATE.observationHold =
+        false;
+
+
+    STATE.observationHoldTime =
+        0;
+
+
+    setPhase(
+        PHASE.SHUFFLE
+    );
+
+
+    return true;
+}
+
+
+/*
+ * =========================================================
+ * END SHUFFLE
+ * =========================================================
+ */
+
+export function endShuffle() {
 
     STATE.shuffle =
         false;
 
-    return false;
+
+    STATE.shuffleStartedAt =
+        0;
+
+
+    /*
+     * Shuffle does NOT complete observation.
+     *
+     * The same image remains the observation target.
+     */
+
+    if (
+        !STATE.observationComplete &&
+        !STATE.observationEvent &&
+        !STATE.explosion
+    ) {
+
+        setPhase(
+            STATE.observationStarted
+                ? PHASE.OBSERVING
+                : PHASE.EXPLORATION
+        );
+    }
 }
 
-
-return true;
-
-}
 
 /*
+ * =========================================================
+ * START EXPLOSION
+ * =========================================================
+ */
 
-* =========================================================
-* SET EXPLOSION STATE
-* =========================================================
-  */
+export function startExplosion() {
 
-export function setExplosionState(
-active
-) {
+    if (
+        STATE.explosion
+    ) {
 
-STATE.explosion =
-    Boolean(
-        active
+        return false;
+    }
+
+
+    STATE.explosion =
+        true;
+
+
+    STATE.explosionStartedAt =
+        getNow();
+
+
+    STATE.controlsLocked =
+        true;
+
+
+    STATE.observationLocked =
+        true;
+
+
+    setPhase(
+        PHASE.EXPLOSION
     );
 
 
-return true;
-
+    return true;
 }
 
-/*
-
-* =========================================================
-* CONTROL LOCK HELPERS
-* =========================================================
-  */
-
-export function lockControls() {
-
-STATE.controlsLocked =
-    true;
-
-}
-
-export function unlockControls() {
 
 /*
- * Do not unlock controls while
- * an observation event is still active.
+ * =========================================================
+ * END EXPLOSION
+ * =========================================================
  */
 
-if (
-    STATE.observationEvent
-) {
+export function endExplosion() {
 
-    return false;
+    STATE.explosion =
+        false;
+
+
+    STATE.explosionStartedAt =
+        0;
+
+
+    STATE.controlsLocked =
+        false;
+
+
+    STATE.observationLocked =
+        false;
 }
 
-
-STATE.controlsLocked =
-    false;
-
-
-return true;
-
-}
 
 /*
+ * =========================================================
+ * START AMBIENT MODE
+ * =========================================================
+ */
 
-* =========================================================
-* RESET RUNTIME STATE
-* =========================================================
-* 
-* Useful for recovery / debugging.
-* =========================================================
-  */
+export function startAmbient() {
 
-export function resetRuntimeState() {
+    /*
+     * Ambient mode must never take over
+     * an observation event.
+     */
 
-STATE.entered =
-    false;
+    if (
+        STATE.observationEvent ||
+        STATE.shuffle ||
+        STATE.explosion
+    ) {
 
-
-STATE.rendererMode =
-    "none";
-
-
-STATE.observationEvent =
-    false;
-
-
-STATE.observationLocked =
-    false;
+        return false;
+    }
 
 
-STATE.controlsLocked =
-    false;
+    if (
+        STATE.ambient
+    ) {
+
+        return true;
+    }
 
 
-STATE.observationComplete =
-    false;
+    STATE.ambient =
+        true;
 
 
-STATE.observationStarted =
-    false;
+    STATE.ambientStartedAt =
+        getNow();
 
 
-STATE.ambient =
-    false;
+    setPhase(
+        PHASE.AMBIENT
+    );
 
 
-STATE.shuffle =
-    false;
+    return true;
+}
 
 
-STATE.explosion =
-    false;
+/*
+ * =========================================================
+ * END AMBIENT MODE
+ * =========================================================
+ */
+
+export function endAmbient() {
+
+    STATE.ambient =
+        false;
 
 
-STATE.idleTime =
-    0;
+    STATE.ambientStartedAt =
+        0;
 
 
-STATE.lastInteraction =
-    now();
+    if (
+        !STATE.observationEvent &&
+        !STATE.shuffle &&
+        !STATE.explosion
+    ) {
+
+        setPhase(
+            STATE.observationStarted
+                ? PHASE.OBSERVING
+                : PHASE.EXPLORATION
+        );
+    }
+}
 
 
-STATE.activeNebula =
-    null;
+/*
+ * =========================================================
+ * SET ACTIVE NEBULA
+ * =========================================================
+ */
+
+export function setActiveNebula(
+    nebula
+) {
+
+    STATE.activeNebula =
+        nebula || null;
 
 
-setPhase(
-    "ENTRY"
-);
+    /*
+     * Increase generation whenever
+     * a new nebula becomes active.
+     */
+
+    STATE.generation +=
+        1;
 
 
-console.log(
-    "[STATE] RUNTIME RESET"
-);
+    /*
+     * Try to expose an optional ID.
+     */
 
+    STATE.nebulaId =
+        nebula?.id
+            ??
+            nebula?.originalImageId
+            ??
+            null;
+
+
+    /*
+     * A new nebula means a new observation.
+     */
+
+    resetObservationState();
+
+
+    resetParticleOperationState();
+
+
+    if (
+        nebula
+    ) {
+
+        setPhase(
+            PHASE.SUMMONING
+        );
+
+    } else {
+
+        setPhase(
+            PHASE.EXPLORATION
+        );
+    }
+
+
+    return STATE.activeNebula;
+}
+
+
+/*
+ * =========================================================
+ * RESET OBSERVATION STATE
+ * =========================================================
+ *
+ * Used when a new nebula becomes available.
+ *
+ * Does NOT unlock controls directly.
+ * =========================================================
+ */
+
+export function resetObservationState() {
+
+    STATE.observationEvent =
+        false;
+
+
+    STATE.observationStarted =
+        false;
+
+
+    STATE.observationComplete =
+        false;
+
+
+    STATE.observationProgress =
+        0;
+
+
+    STATE.observationScore =
+        0;
+
+
+    STATE.observationValid =
+        false;
+
+
+    STATE.observationHold =
+        false;
+
+
+    STATE.observationHoldTime =
+        0;
+
+
+    STATE.observationStartedAt =
+        0;
+
+
+    STATE.observationCompletedAt =
+        0;
+}
+
+
+/*
+ * =========================================================
+ * RESET PARTICLE OPERATION STATE
+ * =========================================================
+ */
+
+export function resetParticleOperationState() {
+
+    STATE.shuffle =
+        false;
+
+
+    STATE.shuffleStartedAt =
+        0;
+
+
+    STATE.explosion =
+        false;
+
+
+    STATE.explosionStartedAt =
+        0;
+}
+
+
+/*
+ * =========================================================
+ * RESET RUNTIME LOCKS
+ * =========================================================
+ */
+
+export function resetLocks() {
+
+    STATE.controlsLocked =
+        false;
+
+
+    STATE.observationLocked =
+        false;
+}
+
+
+/*
+ * =========================================================
+ * RESET FULL RUNTIME
+ * =========================================================
+ *
+ * Used when restarting the entire experience.
+ *
+ * This intentionally clears custom images.
+ * =========================================================
+ */
+
+export function resetState() {
+
+    STATE.entered =
+        false;
+
+
+    STATE.rendererMode =
+        "none";
+
+
+    STATE.phase =
+        PHASE.ENTRY;
+
+
+    STATE.controlsLocked =
+        false;
+
+
+    STATE.observationLocked =
+        false;
+
+
+    STATE.observationEvent =
+        false;
+
+
+    STATE.observationStarted =
+        false;
+
+
+    STATE.observationComplete =
+        false;
+
+
+    STATE.observationProgress =
+        0;
+
+
+    STATE.observationScore =
+        0;
+
+
+    STATE.observationValid =
+        false;
+
+
+    STATE.observationHold =
+        false;
+
+
+    STATE.observationHoldTime =
+        0;
+
+
+    STATE.observationStartedAt =
+        0;
+
+
+    STATE.observationCompletedAt =
+        0;
+
+
+    STATE.ambient =
+        false;
+
+
+    STATE.ambientStartedAt =
+        0;
+
+
+    STATE.shuffle =
+        false;
+
+
+    STATE.shuffleStartedAt =
+        0;
+
+
+    STATE.explosion =
+        false;
+
+
+    STATE.explosionStartedAt =
+        0;
+
+
+    STATE.idleTime =
+        0;
+
+
+    STATE.lastInteraction =
+        getNow();
+
+
+    STATE.activeNebula =
+        null;
+
+
+    STATE.nebulaId =
+        null;
+
+
+    STATE.customImages =
+        [];
+
+
+    STATE.generation =
+        0;
+
+
+    STATE.restartCount +=
+        1;
+}
+
+
+/*
+ * =========================================================
+ * ENTER UNIVERSE
+ * =========================================================
+ */
+
+export function enterUniverse() {
+
+    STATE.entered =
+        true;
+
+
+    STATE.phase =
+        PHASE.SUMMONING;
+
+
+    STATE.lastInteraction =
+        getNow();
+
+
+    STATE.idleTime =
+        0;
+}
+
+
+/*
+ * =========================================================
+ * SET RENDERER MODE
+ * =========================================================
+ */
+
+export function setRendererMode(
+    mode
+) {
+
+    if (
+        typeof mode !==
+        "string"
+    ) {
+
+        return false;
+    }
+
+
+    STATE.rendererMode =
+        mode;
+
+
+    return true;
+}
+
+
+/*
+ * =========================================================
+ * CUSTOM IMAGE
+ * =========================================================
+ */
+
+export function addCustomImage(
+    imageSource
+) {
+
+    if (
+        typeof imageSource !==
+        "string" ||
+        !imageSource
+    ) {
+
+        return false;
+    }
+
+
+    STATE.customImages.push(
+        imageSource
+    );
+
+
+    return true;
+}
+
+
+/*
+ * =========================================================
+ * REMOVE CUSTOM IMAGE
+ * =========================================================
+ */
+
+export function removeCustomImage(
+    imageSource
+) {
+
+    const index =
+        STATE.customImages.indexOf(
+            imageSource
+        );
+
+
+    if (
+        index ===
+        -1
+    ) {
+
+        return false;
+    }
+
+
+    STATE.customImages.splice(
+        index,
+        1
+    );
+
+
+    return true;
+}
+
+
+/*
+ * =========================================================
+ * CLEAR CUSTOM IMAGES
+ * =========================================================
+ */
+
+export function clearCustomImages() {
+
+    STATE.customImages.length =
+        0;
+}
+
+
+/*
+ * =========================================================
+ * IS BUSY
+ * =========================================================
+ *
+ * Useful for input systems.
+ * =========================================================
+ */
+
+export function isUniverseBusy() {
+
+    return (
+
+        STATE.observationEvent ||
+
+        STATE.shuffle ||
+
+        STATE.explosion
+
+    );
+}
+
+
+/*
+ * =========================================================
+ * IS CONTROLS LOCKED
+ * =========================================================
+ */
+
+export function areControlsLocked() {
+
+    return (
+
+        STATE.controlsLocked ||
+
+        STATE.observationLocked
+
+    );
+}
+
+
+/*
+ * =========================================================
+ * IS OBSERVATION ACTIVE
+ * =========================================================
+ */
+
+export function isObservationActive() {
+
+    return (
+
+        STATE.observationStarted &&
+
+        !STATE.observationComplete &&
+
+        !STATE.observationEvent
+
+    );
+}
+
+
+/*
+ * =========================================================
+ * STATE SNAPSHOT
+ * =========================================================
+ *
+ * Returns a read-only-style copy for debugging/UI.
+ * The actual STATE object remains untouched.
+ * =========================================================
+ */
+
+export function getStateSnapshot() {
+
+    return {
+
+        entered:
+            STATE.entered,
+
+        rendererMode:
+            STATE.rendererMode,
+
+        phase:
+            STATE.phase,
+
+        controlsLocked:
+            STATE.controlsLocked,
+
+        observationLocked:
+            STATE.observationLocked,
+
+        observationEvent:
+            STATE.observationEvent,
+
+        observationStarted:
+            STATE.observationStarted,
+
+        observationComplete:
+            STATE.observationComplete,
+
+        observationProgress:
+            STATE.observationProgress,
+
+        observationScore:
+            STATE.observationScore,
+
+        observationValid:
+            STATE.observationValid,
+
+        observationHold:
+            STATE.observationHold,
+
+        observationHoldTime:
+            STATE.observationHoldTime,
+
+        ambient:
+            STATE.ambient,
+
+        shuffle:
+            STATE.shuffle,
+
+        explosion:
+            STATE.explosion,
+
+        idleTime:
+            STATE.idleTime,
+
+        nebulaId:
+            STATE.nebulaId,
+
+        generation:
+            STATE.generation
+    };
 }
