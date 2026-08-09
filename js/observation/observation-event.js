@@ -27,18 +27,22 @@
  *
  * IMPORTANT
  * ---------------------------------------------------------
- * This module owns the observation event timeline.
+ * This module ONLY owns the observation event timeline.
  *
- * ParticleSystem owns particle rendering.
+ * It does NOT determine whether observation was successful.
  *
- * Event states:
+ * Observer decides:
  *
- * COLLAPSING
- * SINGULARITY
- * EXPLOSION
+ * observation complete
  *
- * prevent ParticleSystem.update() from overwriting
- * event-controlled geometry.
+ * Universe decides:
+ *
+ * start observation event
+ *
+ * ParticleSystem owns:
+ *
+ * particle geometry
+ *
  * =========================================================
  */
 
@@ -98,7 +102,7 @@ export async function runObservationEvent(
      * =====================================================
      * DUPLICATE EVENT PROTECTION
      * =====================================================
-     */
+ */
 
     if (
         STATE.observationEvent
@@ -108,7 +112,8 @@ export async function runObservationEvent(
             "[Observation] EVENT ALREADY RUNNING"
         );
 
-        return;
+
+        return false;
     }
 
 
@@ -229,14 +234,8 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * FINAL PARTICLE RECOVERY
+         * RECOVERY
          * =================================================
-         *
-         * The explosion intentionally leaves the
-         * geometry outside the original cloud.
-         *
-         * resetPositions() restores the generated
-         * nebula exactly.
          */
 
         recoverParticleSystem(
@@ -246,7 +245,7 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * RETURN TO EXPLORATION
+         * EXPLORATION
          * =================================================
          */
 
@@ -259,6 +258,9 @@ export async function runObservationEvent(
             "[Observation] EVENT COMPLETE"
         );
 
+
+        return true;
+
     } catch (error) {
 
         console.error(
@@ -268,9 +270,7 @@ export async function runObservationEvent(
 
 
         /*
-         * =================================================
-         * EMERGENCY RECOVERY
-         * =================================================
+         * Emergency recovery.
          */
 
         try {
@@ -291,19 +291,13 @@ export async function runObservationEvent(
 
 
         /*
-         * Restore phase even after
-         * an event failure.
+         * Always restore exploration phase.
          */
 
         setPhase(
             "EXPLORATION"
         );
 
-
-        /*
-         * Keep original error visible
-         * to the caller.
-         */
 
         throw error;
 
@@ -450,9 +444,11 @@ async function fadeOutAudio(
             "[Observation] AUDIO NOT FOUND"
         );
 
+
         await wait(
             duration
         );
+
 
         return;
     }
@@ -460,14 +456,17 @@ async function fadeOutAudio(
 
     const startVolume =
         Number.isFinite(
-            Number(audio.volume)
+            Number(
+                audio.volume
+            )
         )
-            ? Number(audio.volume)
+            ? audio.volume
             : 1;
 
 
     if (
-        startVolume <= 0
+        startVolume <=
+        0
     ) {
 
         try {
@@ -536,9 +535,13 @@ function getMainAudio() {
     const ids = [
 
         "backgroundMusic",
+
         "bgMusic",
+
         "mainAudio",
+
         "audio",
+
         "music"
 
     ];
@@ -557,6 +560,7 @@ function getMainAudio() {
         if (
             typeof HTMLMediaElement !==
             "undefined" &&
+
             element instanceof
             HTMLMediaElement
         ) {
@@ -639,11 +643,6 @@ async function singularity(
     duration
 ) {
 
-    /*
-     * Ensure particles remain exactly
-     * at the singularity.
-     */
-
     particleSystem
         .setSingularity?.();
 
@@ -670,13 +669,13 @@ async function singularity(
 
 
     /*
-     * Approach the singularity,
-     * but never move the camera behind
-     * the origin accidentally.
+     * Move toward the singularity
+     * while preserving camera side.
      */
 
     const direction =
-        startZ >= 0
+        startZ >=
+        0
             ? 1
             : -1;
 
@@ -684,7 +683,10 @@ async function singularity(
     const targetDistance =
         Math.max(
             2,
-            Math.abs(startZ) * 0.45
+            Math.abs(
+                startZ
+            ) *
+            0.45
         );
 
 
@@ -702,10 +704,6 @@ async function singularity(
                     progress
                 );
 
-
-            /*
-             * Keep singularity locked.
-             */
 
             particleSystem
                 .setSingularity?.();
@@ -742,17 +740,9 @@ async function singularity(
     );
 
 
-    /*
-     * Final exact singularity.
-     */
-
     particleSystem
         .setSingularity?.();
 
-
-    /*
-     * Short energy charge hold.
-     */
 
     await wait(
         getObservationConfig(
@@ -784,14 +774,8 @@ async function energyBurst(
 
 
     /*
-     * =====================================================
-     * PREPARE EXPLOSION
-     * =====================================================
-     *
-     * Generate directions ONCE.
-     *
-     * This prevents the explosion pattern from
-     * changing every frame.
+     * Generate explosion directions
+     * once before animation.
      */
 
     particleSystem
@@ -825,7 +809,7 @@ async function energyBurst(
 
 
     /*
-     * Camera pull-back distance.
+     * Camera pull-back.
      */
 
     const pullDistance =
@@ -833,17 +817,14 @@ async function energyBurst(
             5,
             Math.abs(
                 startZ
-            ) * 1.8
+            ) *
+            1.8
         );
 
 
     await animate(
         duration,
         progress => {
-
-            /*
-             * Explosion easing.
-             */
 
             const explosionProgress =
                 easeOutCubic(
@@ -875,9 +856,6 @@ async function energyBurst(
 
                 /*
                  * Camera shock.
-                 *
-                 * Strong near the beginning,
-                 * fades toward the end.
                  */
 
                 const shock =
@@ -885,11 +863,13 @@ async function energyBurst(
                         progress *
                         Math.PI *
                         8
-                    ) *
+                    )
+                    *
                     (
                         1 -
                         progress
-                    ) *
+                    )
+                    *
                     1.5;
 
 
@@ -907,20 +887,11 @@ async function energyBurst(
     );
 
 
-    /*
-     * Guarantee final explosion position.
-     */
-
     particleSystem
         .explode?.(
             1
         );
 
-
-    /*
-     * Give the explosion a tiny
-     * visual hold before recovery.
-     */
 
     await wait(
         getObservationConfig(
@@ -943,12 +914,6 @@ async function energyBurst(
         )
     );
 
-
-    /*
-     * Release explosion state only
-     * after the animation and audio
-     * sequence are complete.
-     */
 
     particleSystem
         .finishExplosion?.();
@@ -993,14 +958,15 @@ async function fadeInAudio(
     } catch (error) {
 
         /*
-         * Browser autoplay policy may block
-         * playback. Do not destroy the event.
+         * Autoplay failure should not
+         * break the observation event.
          */
 
         console.warn(
             "[Observation] AUDIO PLAY FAILED:",
             error
         );
+
 
         return;
     }
@@ -1035,7 +1001,10 @@ function animate(
 ) {
 
     return new Promise(
-        (resolve, reject) => {
+        (
+            resolve,
+            reject
+        ) => {
 
             const numericDuration =
                 Number(
@@ -1085,6 +1054,7 @@ function animate(
 
                 if (
                     frameId !== null &&
+
                     typeof cancelAnimationFrame ===
                     "function"
                 ) {
@@ -1092,6 +1062,7 @@ function animate(
                     cancelAnimationFrame(
                         frameId
                     );
+
 
                     frameId =
                         null;
@@ -1141,19 +1112,23 @@ function animate(
                     finished =
                         true;
 
+
                     reject(
                         error
                     );
+
 
                     return;
                 }
 
 
                 if (
-                    progress >= 1
+                    progress >=
+                    1
                 ) {
 
                     finish();
+
 
                     return;
                 }
@@ -1177,6 +1152,7 @@ function animate(
                         1
                     );
 
+
                     finish();
 
                 } catch (error) {
@@ -1185,6 +1161,7 @@ function animate(
                         error
                     );
                 }
+
 
                 return;
             }
@@ -1270,18 +1247,6 @@ function lerp(
  * =========================================================
  */
 
-function easeInCubic(
-    t
-) {
-
-    return (
-        t *
-        t *
-        t
-    );
-}
-
-
 function easeOutCubic(
     t
 ) {
@@ -1295,7 +1260,6 @@ function easeOutCubic(
             t,
             3
         )
-
     );
 }
 
@@ -1313,6 +1277,7 @@ function easeInOut(
               t
 
             : 1 -
+
               Math.pow(
                   -2 *
                   t +

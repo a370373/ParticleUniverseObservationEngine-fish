@@ -24,10 +24,11 @@
  *
  * - Hold Timer
  * - Observation Complete
+ * - Observation Event
  * - Audio
  * - Particle Collapse
  * - Explosion
- * - Control Lock
+ * - STATE
  *
  * 所有 Observation 判定模組
  * 都應該使用這裡的結果。
@@ -55,6 +56,7 @@ const DEFAULTS = {
     SCALE_TOLERANCE:
         0.08,
 
+
     /*
      * Rotation is dominant because
      * the hidden image is primarily
@@ -71,7 +73,11 @@ const DEFAULTS = {
         0.15,
 
     SCALE_WEIGHT:
-        0.15
+        0.15,
+
+
+    SCORE_THRESHOLD:
+        0.86
 };
 
 
@@ -83,8 +89,7 @@ const DEFAULTS = {
 
 export function calculateObservationScore(
     camera,
-    nebula,
-    THREE
+    nebula
 ) {
 
     /*
@@ -130,7 +135,7 @@ export function calculateObservationScore(
      * -----------------------------------------------------
      * ROTATION
      * -----------------------------------------------------
-     */
+ */
 
     const rotation =
         calculateRotationScore(
@@ -210,6 +215,12 @@ export function calculateObservationScore(
      * -----------------------------------------------------
      * VALID
      * -----------------------------------------------------
+     *
+     * Overall score alone is not enough.
+     *
+     * Rotation and distance must both
+     * be reasonably correct.
+     *
      */
 
     const valid =
@@ -320,26 +331,34 @@ function calculateRotationScore(
         );
 
 
+    const tolerance =
+        DEFAULTS.ANGLE_TOLERANCE;
+
+
     const yawScore =
         toleranceScore(
             yawError,
-            DEFAULTS.ANGLE_TOLERANCE
+            tolerance
         );
 
 
     const pitchScore =
         toleranceScore(
             pitchError,
-            DEFAULTS.ANGLE_TOLERANCE
+            tolerance
         );
 
 
     const rollScore =
         toleranceScore(
             rollError,
-            DEFAULTS.ANGLE_TOLERANCE
+            tolerance
         );
 
+
+    /*
+     * Yaw is most important.
+     */
 
     const score =
 
@@ -380,23 +399,8 @@ function calculateDistanceScore(
 ) {
 
     /*
-     * Target distance is authoritative.
-     */
-
-    const targetDistance =
-        toNumber(
-            target.distance,
-            110
-        );
-
-
-    /*
-     * Prefer distance from origin,
-     * because observation targets are
-     * defined in camera/world coordinates.
-     *
-     * If nebula.center exists, it can
-     * still be used when available.
+     * Nebula center is the authoritative
+     * reference point.
      */
 
     const center =
@@ -412,11 +416,14 @@ function calculateDistanceScore(
         );
 
 
-    const safeTargetDistance =
+    const targetDistance =
         Math.max(
             0.000001,
             Math.abs(
-                targetDistance
+                toNumber(
+                    target.distance,
+                    110
+                )
             )
         );
 
@@ -427,7 +434,7 @@ function calculateDistanceScore(
             targetDistance
         )
         /
-        safeTargetDistance;
+        targetDistance;
 
 
     const score =
@@ -536,8 +543,7 @@ function calculateScaleScore(
      */
 
     const particleObject =
-        nebula?.particleSystem
-            ?.points
+        nebula?.particleSystem?.points
 
         ||
 
@@ -565,8 +571,7 @@ function calculateScaleScore(
 
 
     /*
-     * If the nebula itself exposes
-     * a scale value, prefer it.
+     * Nebula scale has priority.
      */
 
     if (
@@ -783,7 +788,6 @@ function angleDifference(
             0
         )
         -
-
         toNumber(
             b,
             0
@@ -826,41 +830,23 @@ function normalizeVector3(
     value
 ) {
 
-    if (
-        !value
-    ) {
-
-        return {
-
-            x:
-                0,
-
-            y:
-                0,
-
-            z:
-                0
-        };
-    }
-
-
     return {
 
         x:
             toNumber(
-                value.x,
+                value?.x,
                 0
             ),
 
         y:
             toNumber(
-                value.y,
+                value?.y,
                 0
             ),
 
         z:
             toNumber(
-                value.z,
+                value?.z,
                 0
             )
     };
@@ -920,14 +906,16 @@ function toNumber(
     fallback
 ) {
 
-    return Number.isFinite(
+    const number =
         Number(
             value
-        )
+        );
+
+
+    return Number.isFinite(
+        number
     )
-        ? Number(
-            value
-        )
+        ? number
         : fallback;
 }
 
@@ -940,17 +928,7 @@ function toNumber(
 
 function getThreshold() {
 
-    /*
-     * Avoid importing CONFIG here.
-     *
-     * This keeps similarity.js a pure
-     * calculation module.
-     *
-     * Higher-level modules can enforce
-     * their configured threshold.
-     */
-
-    return 0.86;
+    return DEFAULTS.SCORE_THRESHOLD;
 }
 
 

@@ -9,8 +9,8 @@
  *
  * 1. 取得 Nebula
  * 2. 呼叫 ObservationDetector
- * 3. 維持約 2 秒 HOLD
- * 4. 判斷 Observation Complete
+ * 3. 維持 HOLD
+ * 4. Observation Complete
  * 5. Observation Timeout
  *
  * Observer 不負責：
@@ -20,8 +20,10 @@
  * - Explosion
  * - Shuffle
  * - Camera animation
+ * - Observation Event
  *
- * 這些交給 Universe / Observation Event。
+ * Universe / Observation Event
+ * 負責後續事件。
  * =========================================================
  */
 
@@ -43,8 +45,7 @@ export class Observer {
     constructor(
         THREE,
         cameraController,
-        nebulaProvider,
-        universe = null
+        nebulaProvider
     ) {
 
         console.log(
@@ -55,14 +56,13 @@ export class Observer {
         this.THREE =
             THREE;
 
+
         this.cameraController =
             cameraController;
 
+
         this.nebulaProvider =
             nebulaProvider;
-
-        this.universe =
-            universe;
 
 
         /*
@@ -73,8 +73,7 @@ export class Observer {
 
         this.detector =
             new ObservationDetector(
-                cameraController,
-                universe
+                cameraController
             );
 
 
@@ -87,8 +86,10 @@ export class Observer {
         this.started =
             false;
 
+
         this.completed =
             false;
+
 
         this.failed =
             false;
@@ -114,6 +115,7 @@ export class Observer {
 
         this.lastScore =
             0;
+
 
         this.lastResult =
             null;
@@ -148,7 +150,7 @@ export class Observer {
             return {
 
                 completed:
-                    false,
+                    true,
 
                 failed:
                     false,
@@ -178,6 +180,7 @@ export class Observer {
         ) {
 
             this.resetHold();
+
 
             return {
 
@@ -215,6 +218,7 @@ export class Observer {
 
             this.resetHold();
 
+
             return {
 
                 completed:
@@ -247,6 +251,7 @@ export class Observer {
         ) {
 
             this.resetHold();
+
 
             return {
 
@@ -281,8 +286,10 @@ export class Observer {
             this.started =
                 true;
 
+
             this.observationStart =
                 now;
+
 
             STATE.observationStarted =
                 true;
@@ -292,22 +299,27 @@ export class Observer {
         /*
          * -------------------------------------------------
          * Detector
+         *
+         * similarity.js
+         *      ↓
+         * Detector
+         *      ↓
+         * Observer
          * -------------------------------------------------
          */
 
         const result =
-            this.detector.update();
+            this.detector.update(
+                nebula
+            );
 
 
         this.lastScore =
             result.score;
 
+
         this.lastResult =
             result;
-
-
-        nebula.observationScore =
-            result.score;
 
 
         /*
@@ -327,6 +339,7 @@ export class Observer {
 
                 this.holdStart =
                     now;
+
 
                 console.log(
                     "[Observer] TARGET ACQUIRED"
@@ -499,7 +512,7 @@ export class Observer {
             return {
 
                 completed:
-                    false,
+                    true,
 
                 failed:
                     false,
@@ -519,6 +532,7 @@ export class Observer {
         this.completed =
             true;
 
+
         this.failed =
             false;
 
@@ -530,6 +544,7 @@ export class Observer {
         STATE.observationProgress =
             1;
 
+
         STATE.observationComplete =
             true;
 
@@ -540,6 +555,7 @@ export class Observer {
 
             nebula.observationScore =
                 1;
+
 
             nebula.observationHold =
                 this.holdDuration;
@@ -554,39 +570,19 @@ export class Observer {
         /*
          * IMPORTANT
          * -------------------------------------------------
-         * Observer does NOT directly execute the event.
          *
-         * Universe is responsible for starting:
+         * Observer does NOT call:
          *
-         * observation-event.js
+         * universe.completeObservation()
          *
-         * If Universe exposes completeObservation(),
-         * request it here.
+         * Observer only marks observation complete.
+         *
+         * Universe should detect:
+         *
+         * STATE.observationComplete
+         *
+         * and start observation-event.js.
          */
-
-        const universe =
-            this.universe;
-
-
-        if (
-            universe &&
-            typeof universe.completeObservation ===
-            "function"
-        ) {
-
-            Promise.resolve(
-                universe.completeObservation()
-            )
-            .catch(
-                error => {
-
-                    console.error(
-                        "[Observer] COMPLETE EVENT ERROR:",
-                        error
-                    );
-                }
-            );
-        }
 
 
         return {
@@ -620,20 +616,26 @@ export class Observer {
         this.started =
             false;
 
+
         this.completed =
             false;
+
 
         this.failed =
             false;
 
+
         this.observationStart =
             0;
+
 
         this.holdStart =
             0;
 
+
         this.lastScore =
             0;
+
 
         this.lastResult =
             null;
@@ -642,8 +644,10 @@ export class Observer {
         STATE.observationStarted =
             false;
 
+
         STATE.observationComplete =
             false;
+
 
         STATE.observationProgress =
             0;
@@ -692,7 +696,7 @@ export class Observer {
      * =====================================================
      * GET NEBULA
      * =====================================================
-     */
+ */
 
     getNebula() {
 
@@ -735,6 +739,7 @@ export class Observer {
 
             this.observationStart =
                 now;
+
 
             return false;
         }
