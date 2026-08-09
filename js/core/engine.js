@@ -1,7 +1,7 @@
 /*
  * =========================================================
  * ENGINE
- * MINIMAL VISUAL TEST
+ * FULL PARTICLE UNIVERSE RUNTIME
  * =========================================================
  */
 
@@ -32,7 +32,6 @@ export class Engine {
             "[Engine] CONSTRUCTOR"
         );
 
-
         this.renderer =
             renderer;
 
@@ -54,20 +53,22 @@ export class Engine {
         this.roaming =
             roaming;
 
-
         this.ambient =
             new AmbientController(
                 cameraController
             );
 
-
         this.running =
             false;
-
 
         this.last =
             performance.now();
 
+        this.frameCount =
+            0;
+
+        this.lastDebug =
+            0;
 
         console.log(
             "[Engine] READY"
@@ -87,25 +88,42 @@ export class Engine {
             this.running
         ) {
 
+            console.warn(
+                "[Engine] START IGNORED: ALREADY RUNNING"
+            );
+
             return;
         }
-
 
         this.running =
             true;
 
-
         this.last =
             performance.now();
-
 
         console.log(
             "[Engine] LOOP START"
         );
 
-
         requestAnimationFrame(
             this.frame.bind(this)
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * STOP
+     * =====================================================
+     */
+
+    stop() {
+
+        this.running =
+            false;
+
+        console.log(
+            "[Engine] LOOP STOP"
         );
     }
 
@@ -128,11 +146,17 @@ export class Engine {
         }
 
 
+        this.frameCount++;
+
+
         const dt =
             Math.min(
                 0.05,
-                (now - this.last) /
-                1000
+                Math.max(
+                    0,
+                    (now - this.last) /
+                    1000
+                )
             );
 
 
@@ -142,7 +166,37 @@ export class Engine {
 
         /*
          * =================================================
-         * STATE
+         * PERIODIC DEBUG
+         * =================================================
+         *
+         * 每約 3 秒印一次，
+         * 避免 console 被每幀 log 爆。
+         */
+
+        if (
+            now - this.lastDebug >
+            3000
+        ) {
+
+            this.lastDebug =
+                now;
+
+            console.log(
+                "[Engine] FRAME:",
+                this.frameCount,
+                "DT:",
+                dt.toFixed(4),
+                "PHASE:",
+                STATE.phase,
+                "IDLE:",
+                STATE.idleTime
+            );
+        }
+
+
+        /*
+         * =================================================
+         * IDLE
          * =================================================
          */
 
@@ -155,7 +209,7 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] updateIdle error:",
+                "[Engine] IDLE ERROR:",
                 error
             );
         }
@@ -163,7 +217,7 @@ export class Engine {
 
         /*
          * =================================================
-         * CAMERA
+         * AMBIENT + CAMERA
          * =================================================
          */
 
@@ -185,6 +239,10 @@ export class Engine {
 
                         STATE.ambient =
                             true;
+
+                        console.log(
+                            "[Engine] AMBIENT ENTER"
+                        );
                     }
                 }
 
@@ -194,16 +252,21 @@ export class Engine {
                 );
 
 
-                this.cameraController
-                    .update(
-                        dt
-                    );
+                if (
+                    this.cameraController
+                ) {
+
+                    this.cameraController
+                        .update(
+                            dt
+                        );
+                }
             }
 
         } catch (error) {
 
             console.error(
-                "[Engine] CAMERA ERROR:",
+                "[Engine] CAMERA / AMBIENT ERROR:",
                 error
             );
         }
@@ -230,7 +293,7 @@ export class Engine {
         } catch (error) {
 
             console.error(
-                "[Engine] UNIVERSE ERROR:",
+                "[Engine] UNIVERSE UPDATE ERROR:",
                 error
             );
         }
@@ -265,16 +328,76 @@ export class Engine {
         /*
          * =================================================
          * OBSERVER
-         *
-         * DISABLED IN TEST MODE
          * =================================================
+         *
+         * 這裡重新接回完整觀察系統。
          */
 
-        /*
-         * 不執行 observer。
-         *
-         * 等畫面成功顯示後再重新接回。
-         */
+        try {
+
+            if (
+                !STATE.ambient &&
+                !STATE.observationLocked &&
+                !STATE.observationComplete &&
+                !STATE.shuffle &&
+                this.observer
+            ) {
+
+                this.observer.ambient =
+                    false;
+
+
+                const result =
+                    this.observer.update(
+                        now
+                    );
+
+
+                if (
+                    result &&
+                    result.completed
+                ) {
+
+                    console.log(
+                        "[Engine] OBSERVATION COMPLETED"
+                    );
+
+
+                    if (
+                        this.universe
+                    ) {
+
+                        this.universe
+                            .completeObservation();
+                    }
+
+                } else if (
+                    result &&
+                    result.failed
+                ) {
+
+                    console.log(
+                        "[Engine] OBSERVATION FAILED -> SHUFFLE"
+                    );
+
+
+                    if (
+                        this.universe
+                    ) {
+
+                        this.universe
+                            .shuffle();
+                    }
+                }
+            }
+
+        } catch (error) {
+
+            console.error(
+                "[Engine] OBSERVER ERROR:",
+                error
+            );
+        }
 
 
         /*
