@@ -17,11 +17,28 @@
  *        ↓
  * Particle Explosion
  *        ↓
- * Camera Shock / Pull Back
+ * Camera Pull Back / Shock
  *        ↓
  * Audio Fade In
  *        ↓
- * Event Complete
+ * Particle Recovery
+ *        ↓
+ * Exploration
+ *
+ * IMPORTANT
+ * ---------------------------------------------------------
+ * This module owns the observation event timeline.
+ *
+ * ParticleSystem owns particle rendering.
+ *
+ * Event states:
+ *
+ * COLLAPSING
+ * SINGULARITY
+ * EXPLOSION
+ *
+ * prevent ParticleSystem.update() from overwriting
+ * event-controlled geometry.
  * =========================================================
  */
 
@@ -37,7 +54,7 @@ import {
 
 /*
  * =========================================================
- * MAIN EVENT
+ * MAIN OBSERVATION EVENT
  * =========================================================
  */
 
@@ -62,7 +79,7 @@ export async function runObservationEvent(
     ) {
 
         throw new Error(
-            "Observation requires a camera."
+            "[Observation] camera is required."
         );
     }
 
@@ -72,13 +89,15 @@ export async function runObservationEvent(
     ) {
 
         throw new Error(
-            "Observation requires a particle system."
+            "[Observation] particleSystem is required."
         );
     }
 
 
     /*
-     * Prevent duplicate event.
+     * =====================================================
+     * DUPLICATE EVENT PROTECTION
+     * =====================================================
      */
 
     if (
@@ -92,6 +111,12 @@ export async function runObservationEvent(
         return;
     }
 
+
+    /*
+     * =====================================================
+     * LOCK
+     * =====================================================
+     */
 
     STATE.observationEvent =
         true;
@@ -113,7 +138,7 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * AUDIO FADE OUT
+         * AUDIO OUT
          * =================================================
          */
 
@@ -178,7 +203,7 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * ENERGY BURST
+         * EXPLOSION
          * =================================================
          */
 
@@ -204,37 +229,34 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * RESET
+         * FINAL PARTICLE RECOVERY
          * =================================================
+         *
+         * The explosion intentionally leaves the
+         * geometry outside the original cloud.
+         *
+         * resetPositions() restores the generated
+         * nebula exactly.
          */
 
-        try {
-
+        recoverParticleSystem(
             particleSystem
-                .resetPositions?.();
-
-        } catch (error) {
-
-            console.warn(
-                "[Observation] RESET FAILED:",
-                error
-            );
-        }
+        );
 
 
         /*
          * =================================================
-         * COMPLETE
+         * RETURN TO EXPLORATION
          * =================================================
          */
 
-        console.log(
-            "[Observation] EVENT COMPLETE"
+        setPhase(
+            "EXPLORATION"
         );
 
 
-        setPhase(
-            "EXPLORATION"
+        console.log(
+            "[Observation] EVENT COMPLETE"
         );
 
     } catch (error) {
@@ -246,21 +268,42 @@ export async function runObservationEvent(
 
 
         /*
-         * Attempt particle recovery.
+         * =================================================
+         * EMERGENCY RECOVERY
+         * =================================================
          */
 
         try {
 
-            particleSystem
-                .resetPositions?.();
+            recoverParticleSystem(
+                particleSystem
+            );
 
-        } catch (_) {}
+        } catch (
+            recoveryError
+        ) {
 
+            console.error(
+                "[Observation] RECOVERY ERROR:",
+                recoveryError
+            );
+        }
+
+
+        /*
+         * Restore phase even after
+         * an event failure.
+         */
 
         setPhase(
             "EXPLORATION"
         );
 
+
+        /*
+         * Keep original error visible
+         * to the caller.
+         */
 
         throw error;
 
@@ -268,12 +311,9 @@ export async function runObservationEvent(
 
         /*
          * =================================================
-         * UNLOCK
+         * ALWAYS UNLOCK
          * =================================================
          */
-
-        unlockControls();
-
 
         STATE.observationLocked =
             false;
@@ -281,6 +321,47 @@ export async function runObservationEvent(
 
         STATE.observationEvent =
             false;
+
+
+        unlockControls();
+
+
+        console.log(
+            "[Observation] EVENT LOCK RELEASED"
+        );
+    }
+}
+
+
+/*
+ * =========================================================
+ * RECOVER PARTICLE SYSTEM
+ * =========================================================
+ */
+
+function recoverParticleSystem(
+    particleSystem
+) {
+
+    if (
+        !particleSystem
+    ) {
+
+        return;
+    }
+
+
+    try {
+
+        particleSystem
+            .resetPositions?.();
+
+    } catch (error) {
+
+        console.warn(
+            "[Observation] PARTICLE RESET FAILED:",
+            error
+        );
     }
 }
 
@@ -297,11 +378,6 @@ function lockControls() {
         true;
 
 
-    console.log(
-        "[Observation] CONTROLS LOCKED"
-    );
-
-
     if (
         typeof document !==
         "undefined"
@@ -313,6 +389,11 @@ function lockControls() {
                 "observation-locked"
             );
     }
+
+
+    console.log(
+        "[Observation] CONTROLS LOCKED"
+    );
 }
 
 
@@ -379,17 +460,32 @@ async function fadeOutAudio(
 
     const startVolume =
         Number.isFinite(
-            audio.volume
+            Number(audio.volume)
         )
-            ? audio.volume
+            ? Number(audio.volume)
             : 1;
+
+
+    if (
+        startVolume <= 0
+    ) {
+
+        try {
+
+            audio.pause();
+
+        } catch (_) {}
+
+
+        return;
+    }
 
 
     await animate(
         duration,
         progress => {
 
-            const p =
+            const eased =
                 easeInOut(
                     progress
                 );
@@ -401,7 +497,7 @@ async function fadeOutAudio(
                     startVolume *
                     (
                         1 -
-                        p
+                        eased
                     )
                 );
         }
@@ -440,14 +536,10 @@ function getMainAudio() {
     const ids = [
 
         "backgroundMusic",
-
         "bgMusic",
-
+        "mainAudio",
         "audio",
-
-        "music",
-
-        "mainAudio"
+        "music"
 
     ];
 
@@ -480,21 +572,13 @@ function getMainAudio() {
         );
 
 
-    if (
-        audio
-    ) {
-
-        return audio;
-    }
-
-
-    return null;
+    return audio || null;
 }
 
 
 /*
  * =========================================================
- * PARTICLE COLLAPSE
+ * COLLAPSE PARTICLES
  * =========================================================
  */
 
@@ -515,28 +599,26 @@ async function collapseParticles(
         duration,
         progress => {
 
-            const p =
-                easeInCubic(
-                    progress
-                );
-
-
             particleSystem
                 .applyCollapse?.(
-                    p
+                    progress
                 );
         }
     );
 
 
     /*
-     * Guarantee final state.
+     * Guarantee exact singularity.
      */
 
     particleSystem
         .applyCollapse?.(
             1
         );
+
+
+    particleSystem
+        .setSingularity?.();
 
 
     console.log(
@@ -556,6 +638,15 @@ async function singularity(
     camera,
     duration
 ) {
+
+    /*
+     * Ensure particles remain exactly
+     * at the singularity.
+     */
+
+    particleSystem
+        .setSingularity?.();
+
 
     const startX =
         getNumber(
@@ -578,11 +669,28 @@ async function singularity(
         );
 
 
-    const targetZ =
+    /*
+     * Approach the singularity,
+     * but never move the camera behind
+     * the origin accidentally.
+     */
+
+    const direction =
+        startZ >= 0
+            ? 1
+            : -1;
+
+
+    const targetDistance =
         Math.max(
             2,
-            startZ * 0.45
+            Math.abs(startZ) * 0.45
         );
+
+
+    const targetZ =
+        targetDistance *
+        direction;
 
 
     await animate(
@@ -596,31 +704,16 @@ async function singularity(
 
 
             /*
-             * Keep particles compressed.
+             * Keep singularity locked.
              */
 
             particleSystem
-                .applyCollapse?.(
-                    1
-                );
+                .setSingularity?.();
 
-
-            /*
-             * Camera approaches
-             * the singularity.
-             */
 
             if (
                 camera.position
             ) {
-
-                camera.position.z =
-                    lerp(
-                        startZ,
-                        targetZ,
-                        p
-                    );
-
 
                 camera.position.x =
                     lerp(
@@ -636,17 +729,36 @@ async function singularity(
                         startY * 0.45,
                         p
                     );
+
+
+                camera.position.z =
+                    lerp(
+                        startZ,
+                        targetZ,
+                        p
+                    );
             }
         }
     );
 
 
     /*
-     * Hold the singularity.
+     * Final exact singularity.
+     */
+
+    particleSystem
+        .setSingularity?.();
+
+
+    /*
+     * Short energy charge hold.
      */
 
     await wait(
-        250
+        getObservationConfig(
+            "SINGULARITY_HOLD",
+            250
+        )
     );
 }
 
@@ -662,6 +774,34 @@ async function energyBurst(
     camera,
     duration
 ) {
+
+    if (
+        !particleSystem
+    ) {
+
+        return;
+    }
+
+
+    /*
+     * =====================================================
+     * PREPARE EXPLOSION
+     * =====================================================
+     *
+     * Generate directions ONCE.
+     *
+     * This prevents the explosion pattern from
+     * changing every frame.
+     */
+
+    particleSystem
+        .prepareExplosion?.(
+            getObservationConfig(
+                "EXPLOSION_STRENGTH",
+                1
+            )
+        );
+
 
     const startX =
         getNumber(
@@ -685,8 +825,7 @@ async function energyBurst(
 
 
     /*
-     * Prevent invalid camera
-     * pull-back distance.
+     * Camera pull-back distance.
      */
 
     const pullDistance =
@@ -702,24 +841,24 @@ async function energyBurst(
         duration,
         progress => {
 
-            const p =
+            /*
+             * Explosion easing.
+             */
+
+            const explosionProgress =
                 easeOutCubic(
                     progress
                 );
 
 
-            /*
-             * Explosion.
-             */
-
             particleSystem
                 .explode?.(
-                    p
+                    explosionProgress
                 );
 
 
             /*
-             * Camera pull-back.
+             * Camera movement.
              */
 
             if (
@@ -727,13 +866,18 @@ async function energyBurst(
             ) {
 
                 camera.position.z =
+
                     startZ +
+
                     pullDistance *
-                    p;
+                    progress;
 
 
                 /*
-                 * Camera shock wave.
+                 * Camera shock.
+                 *
+                 * Strong near the beginning,
+                 * fades toward the end.
                  */
 
                 const shock =
@@ -764,7 +908,7 @@ async function energyBurst(
 
 
     /*
-     * Guarantee final explosion state.
+     * Guarantee final explosion position.
      */
 
     particleSystem
@@ -774,7 +918,22 @@ async function energyBurst(
 
 
     /*
-     * Restore audio.
+     * Give the explosion a tiny
+     * visual hold before recovery.
+     */
+
+    await wait(
+        getObservationConfig(
+            "EXPLOSION_HOLD",
+            120
+        )
+    );
+
+
+    /*
+     * =====================================================
+     * AUDIO RETURN
+     * =====================================================
      */
 
     await fadeInAudio(
@@ -783,6 +942,16 @@ async function energyBurst(
             1200
         )
     );
+
+
+    /*
+     * Release explosion state only
+     * after the animation and audio
+     * sequence are complete.
+     */
+
+    particleSystem
+        .finishExplosion?.();
 
 
     console.log(
@@ -822,6 +991,11 @@ async function fadeInAudio(
         await audio.play();
 
     } catch (error) {
+
+        /*
+         * Browser autoplay policy may block
+         * playback. Do not destroy the event.
+         */
 
         console.warn(
             "[Observation] AUDIO PLAY FAILED:",
@@ -863,21 +1037,36 @@ function animate(
     return new Promise(
         (resolve, reject) => {
 
-            const safeDuration =
-                Math.max(
-                    1,
-                    Number(
-                        duration
-                    ) || 1
+            const numericDuration =
+                Number(
+                    duration
                 );
 
 
+            const safeDuration =
+                Number.isFinite(
+                    numericDuration
+                )
+                    ? Math.max(
+                        1,
+                        numericDuration
+                    )
+                    : 1;
+
+
             const start =
-                performance.now();
+                typeof performance !==
+                "undefined"
+                    ? performance.now()
+                    : Date.now();
 
 
             let finished =
                 false;
+
+
+            let frameId =
+                null;
 
 
             function finish() {
@@ -892,6 +1081,21 @@ function animate(
 
                 finished =
                     true;
+
+
+                if (
+                    frameId !== null &&
+                    typeof cancelAnimationFrame ===
+                    "function"
+                ) {
+
+                    cancelAnimationFrame(
+                        frameId
+                    );
+
+                    frameId =
+                        null;
+                }
 
 
                 resolve();
@@ -918,8 +1122,11 @@ function animate(
                 const progress =
                     Math.min(
                         1,
-                        elapsed /
-                        safeDuration
+                        Math.max(
+                            0,
+                            elapsed /
+                            safeDuration
+                        )
                     );
 
 
@@ -952,15 +1159,41 @@ function animate(
                 }
 
 
-                requestAnimationFrame(
-                    frame
-                );
+                frameId =
+                    requestAnimationFrame(
+                        frame
+                    );
             }
 
 
-            requestAnimationFrame(
-                frame
-            );
+            if (
+                typeof requestAnimationFrame !==
+                "function"
+            ) {
+
+                try {
+
+                    callback(
+                        1
+                    );
+
+                    finish();
+
+                } catch (error) {
+
+                    reject(
+                        error
+                    );
+                }
+
+                return;
+            }
+
+
+            frameId =
+                requestAnimationFrame(
+                    frame
+                );
         }
     );
 }
@@ -976,17 +1209,29 @@ function wait(
     milliseconds
 ) {
 
+    const numeric =
+        Number(
+            milliseconds
+        );
+
+
+    const safe =
+        Number.isFinite(
+            numeric
+        )
+            ? Math.max(
+                0,
+                numeric
+            )
+            : 0;
+
+
     return new Promise(
         resolve => {
 
             setTimeout(
                 resolve,
-                Math.max(
-                    0,
-                    Number(
-                        milliseconds
-                    ) || 0
-                )
+                safe
             );
         }
     );
@@ -1006,11 +1251,14 @@ function lerp(
 ) {
 
     return (
+
         a +
+
         (
             b -
             a
         ) *
+
         t
     );
 }
@@ -1026,9 +1274,11 @@ function easeInCubic(
     t
 ) {
 
-    return t *
+    return (
         t *
-        t;
+        t *
+        t
+    );
 }
 
 
@@ -1036,12 +1286,17 @@ function easeOutCubic(
     t
 ) {
 
-    return 1 -
+    return (
+
+        1 -
+
         Math.pow(
             1 -
             t,
             3
-        );
+        )
+
+    );
 }
 
 
@@ -1049,20 +1304,23 @@ function easeInOut(
     t
 ) {
 
-    return t < 0.5
+    return (
 
-        ? 2 *
-          t *
-          t
+        t < 0.5
 
-        : 1 -
-          Math.pow(
-              -2 *
-              t +
-              2,
+            ? 2 *
+              t *
+              t
+
+            : 1 -
+              Math.pow(
+                  -2 *
+                  t +
+                  2,
+                  2
+              ) /
               2
-          ) /
-          2;
+    );
 }
 
 
@@ -1077,14 +1335,16 @@ function getNumber(
     fallback
 ) {
 
-    return Number.isFinite(
+    const number =
         Number(
             value
-        )
+        );
+
+
+    return Number.isFinite(
+        number
     )
-        ? Number(
-            value
-        )
+        ? number
         : fallback;
 }
 
@@ -1106,18 +1366,21 @@ function getObservationConfig(
             CONFIG?.OBSERVATION;
 
 
-        if (
-            observation &&
-            Number.isFinite(
-                observation[key]
-            )
-        ) {
-
-            return observation[key];
-        }
+        const value =
+            observation?.[key];
 
 
-        return fallback;
+        const number =
+            Number(
+                value
+            );
+
+
+        return Number.isFinite(
+            number
+        )
+            ? number
+            : fallback;
 
     } catch (_) {
 
