@@ -3,9 +3,20 @@
  * PARTICLE UNIVERSE
  * =========================================================
  *
- * This version intentionally uses dynamic imports so that
- * dependency loading errors can be identified instead of
- * appearing as an opaque failure of universe.js itself.
+ * Robust Universe Controller
+ *
+ * Responsibilities:
+ *
+ * 1. Load Universe dependencies
+ * 2. Create background stars / dust
+ * 3. Load Base64 image
+ * 4. Generate particle nebula
+ * 5. Create ParticleSystem
+ * 6. Handle summoning phase
+ * 7. Handle exploration
+ * 8. Handle shuffle
+ * 9. Handle observation completion
+ * 10. Safely dispose old particle systems
  *
  * =========================================================
  */
@@ -27,11 +38,35 @@ export class Universe {
         this.camera =
             cameraController;
 
+        /*
+         * -------------------------------------------------
+         * PARTICLE STATE
+         * -------------------------------------------------
+         */
+
         this.particleSystem =
             null;
 
         this.nebula =
             null;
+
+        /*
+         * -------------------------------------------------
+         * BACKGROUND
+         * -------------------------------------------------
+         */
+
+        this.stars =
+            null;
+
+        this.dust =
+            null;
+
+        /*
+         * -------------------------------------------------
+         * CYCLE
+         * -------------------------------------------------
+         */
 
         this.cycleId =
             0;
@@ -45,18 +80,27 @@ export class Universe {
         this.summonDuration =
             6500;
 
+        /*
+         * -------------------------------------------------
+         * INITIALIZATION
+         * -------------------------------------------------
+         */
+
         this.ready =
             false;
 
         this.loading =
             true;
 
+        this.failed =
+            false;
+
         this.dependencies =
             null;
 
         /*
          * -------------------------------------------------
-         * Load dependencies asynchronously.
+         * START INITIALIZATION
          * -------------------------------------------------
          */
 
@@ -66,6 +110,9 @@ export class Universe {
 
                     this.loading =
                         false;
+
+                    this.failed =
+                        true;
 
                     console.error(
                         "[Universe] INITIALIZATION FAILED:",
@@ -89,13 +136,13 @@ export class Universe {
     async initialize() {
 
         console.log(
-            "[Universe] Loading dependencies..."
+            "[Universe] Initializing..."
         );
 
 
         /*
          * -------------------------------------------------
-         * LOAD EACH MODULE SEPARATELY
+         * MODULE LOADER
          * -------------------------------------------------
          */
 
@@ -109,8 +156,7 @@ export class Universe {
 
                     console.log(
                         "[Universe] Loading:",
-                        name,
-                        path
+                        name
                     );
 
                     const module =
@@ -126,7 +172,7 @@ export class Universe {
                 } catch (error) {
 
                     console.error(
-                        "[Universe] FAILED:",
+                        "[Universe] Failed:",
                         name,
                         path,
                         error
@@ -146,6 +192,12 @@ export class Universe {
                 }
             };
 
+
+        /*
+         * -------------------------------------------------
+         * LOAD MODULES
+         * -------------------------------------------------
+         */
 
         const nebulaModule =
             await load(
@@ -204,9 +256,9 @@ export class Universe {
 
 
         /*
-         * -------------------------------------------------
+         * =================================================
          * VERIFY EXPORTS
-         * -------------------------------------------------
+         * =================================================
          */
 
         if (
@@ -265,22 +317,22 @@ export class Universe {
 
 
         if (
+            !stateModule.STATE
+        ) {
+
+            throw new Error(
+                "state.js does not export STATE."
+            );
+        }
+
+
+        if (
             typeof stateModule.setPhase !==
             "function"
         ) {
 
             throw new Error(
                 "state.js does not export setPhase."
-            );
-        }
-
-
-        if (
-            !stateModule.STATE
-        ) {
-
-            throw new Error(
-                "state.js does not export STATE."
             );
         }
 
@@ -317,10 +369,15 @@ export class Universe {
         }
 
 
+        console.log(
+            "[Universe] All dependencies verified."
+        );
+
+
         /*
-         * -------------------------------------------------
+         * =================================================
          * STORE DEPENDENCIES
-         * -------------------------------------------------
+         * =================================================
          */
 
         this.dependencies = {
@@ -358,42 +415,18 @@ export class Universe {
 
 
         /*
-         * -------------------------------------------------
-         * BACKGROUND
-         * -------------------------------------------------
+         * =================================================
+         * CREATE BACKGROUND
+         * =================================================
          */
 
-        this.stars =
-            this.dependencies.createStars(
-                this.THREE,
-                this.dependencies.CONFIG
-                    .PARTICLES
-                    .STARS
-            );
-
-
-        this.dust =
-            this.dependencies.createDust(
-                this.THREE,
-                this.dependencies.CONFIG
-                    .PARTICLES
-                    .DUST
-            );
-
-
-        this.scene.add(
-            this.stars
-        );
-
-        this.scene.add(
-            this.dust
-        );
+        this.createBackground();
 
 
         /*
-         * -------------------------------------------------
-         * READY
-         * -------------------------------------------------
+         * =================================================
+         * MARK READY
+         * =================================================
          */
 
         this.loading =
@@ -402,19 +435,192 @@ export class Universe {
         this.ready =
             true;
 
+        this.failed =
+            false;
+
 
         console.log(
-            "[Universe] Dependencies ready."
+            "[Universe] Universe READY."
         );
 
 
         /*
-         * -------------------------------------------------
+         * =================================================
          * FIRST CYCLE
-         * -------------------------------------------------
+         * =================================================
          */
 
         await this.startNewCycle();
+    }
+
+
+    /*
+     * =====================================================
+     * CREATE BACKGROUND
+     * =====================================================
+     */
+
+    createBackground() {
+
+        if (
+            !this.dependencies
+        ) {
+
+            throw new Error(
+                "Universe dependencies unavailable."
+            );
+        }
+
+
+        const {
+            createStars,
+            createDust,
+            CONFIG
+        } =
+            this.dependencies;
+
+
+        /*
+         * -------------------------------------------------
+         * REMOVE OLD BACKGROUND
+         * -------------------------------------------------
+         */
+
+        if (
+            this.stars
+        ) {
+
+            try {
+
+                this.scene.remove(
+                    this.stars
+                );
+
+            } catch (_) {}
+        }
+
+
+        if (
+            this.dust
+        ) {
+
+            try {
+
+                this.scene.remove(
+                    this.dust
+                );
+
+            } catch (_) {}
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * STAR COUNT
+         * -------------------------------------------------
+         */
+
+        const starCount =
+            CONFIG?.PARTICLES?.STARS ||
+            4500;
+
+
+        const dustCount =
+            CONFIG?.PARTICLES?.DUST ||
+            1800;
+
+
+        /*
+         * -------------------------------------------------
+         * CREATE STARS
+         * -------------------------------------------------
+         */
+
+        try {
+
+            this.stars =
+                createStars(
+                    this.THREE,
+                    starCount
+                );
+
+            this.scene.add(
+                this.stars
+            );
+
+            console.log(
+                "[Universe] Stars created:",
+                starCount
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[Universe] Star creation failed:",
+                error
+            );
+
+            this.stars =
+                null;
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * CREATE DUST
+         * -------------------------------------------------
+         */
+
+        try {
+
+            this.dust =
+                createDust(
+                    this.THREE,
+                    dustCount
+                );
+
+            this.scene.add(
+                this.dust
+            );
+
+            console.log(
+                "[Universe] Dust created:",
+                dustCount
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[Universe] Dust creation failed:",
+                error
+            );
+
+            this.dust =
+                null;
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * BACKGROUND STATUS
+         * -------------------------------------------------
+         */
+
+        if (
+            !this.stars &&
+            !this.dust
+        ) {
+
+            console.warn(
+                "[Universe] No background objects created."
+            );
+
+        } else {
+
+            console.log(
+                "[Universe] Background ONLINE."
+            );
+        }
     }
 
 
@@ -426,13 +632,19 @@ export class Universe {
 
     async startNewCycle() {
 
+        /*
+         * -------------------------------------------------
+         * READY CHECK
+         * -------------------------------------------------
+         */
+
         if (
             !this.ready ||
             !this.dependencies
         ) {
 
             console.warn(
-                "[Universe] startNewCycle ignored: not ready."
+                "[Universe] Cycle ignored: Universe not ready."
             );
 
             return;
@@ -440,23 +652,28 @@ export class Universe {
 
 
         const {
-
             generateNebula,
             ParticleSystem,
             getRandomImage,
-            setPhase,
-            CONFIG
-
+            setPhase
         } =
             this.dependencies;
 
+
+        /*
+         * -------------------------------------------------
+         * NEW CYCLE ID
+         * -------------------------------------------------
+         */
 
         const currentCycle =
             ++this.cycleId;
 
 
         /*
-         * Cancel old timer.
+         * -------------------------------------------------
+         * CANCEL OLD TIMER
+         * -------------------------------------------------
          */
 
         if (
@@ -472,6 +689,12 @@ export class Universe {
         }
 
 
+        /*
+         * -------------------------------------------------
+         * PHASE
+         * -------------------------------------------------
+         */
+
         setPhase(
             "SUMMONING"
         );
@@ -479,33 +702,50 @@ export class Universe {
 
         /*
          * -------------------------------------------------
-         * IMAGE
+         * GET IMAGE
          * -------------------------------------------------
          */
 
-        const source =
-            getRandomImage();
+        let source = null;
 
 
-        if (!source) {
+        try {
 
-            const error =
-                new Error(
-                    "No Base64 image is available."
-                );
+            source =
+                getRandomImage();
+
+        } catch (error) {
 
             console.error(
-                "[Universe]",
+                "[Universe] Image library error:",
                 error
+            );
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * NO IMAGE
+         * -------------------------------------------------
+         */
+
+        if (
+            !source
+        ) {
+
+            console.warn(
+                "[Universe] No Base64 image available."
             );
 
-            this.showError(
-                error
-            );
+
+            /*
+             * Keep background alive.
+             */
 
             setPhase(
                 "EXPLORATION"
             );
+
 
             return;
         }
@@ -517,9 +757,9 @@ export class Universe {
 
 
         /*
-         * -------------------------------------------------
+         * =================================================
          * GENERATE NEBULA
-         * -------------------------------------------------
+         * =================================================
          */
 
         let nebula;
@@ -540,8 +780,46 @@ export class Universe {
                 error
             );
 
+
             this.showError(
                 error
+            );
+
+
+            setPhase(
+                "EXPLORATION"
+            );
+
+
+            return;
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * CHECK CYCLE
+         * -------------------------------------------------
+         */
+
+        if (
+            currentCycle !==
+            this.cycleId
+        ) {
+
+            console.log(
+                "[Universe] Ignoring obsolete cycle."
+            );
+
+            return;
+        }
+
+
+        if (
+            !nebula
+        ) {
+
+            console.error(
+                "[Universe] generateNebula returned null."
             );
 
             setPhase(
@@ -553,17 +831,10 @@ export class Universe {
 
 
         /*
-         * Ignore obsolete cycle.
+         * -------------------------------------------------
+         * SAVE NEBULA
+         * -------------------------------------------------
          */
-
-        if (
-            currentCycle !==
-            this.cycleId
-        ) {
-
-            return;
-        }
-
 
         this.nebula =
             nebula;
@@ -579,9 +850,9 @@ export class Universe {
 
 
         /*
-         * -------------------------------------------------
-         * CREATE PARTICLES
-         * -------------------------------------------------
+         * =================================================
+         * CREATE PARTICLE SYSTEM
+         * =================================================
          */
 
         try {
@@ -595,77 +866,184 @@ export class Universe {
         } catch (error) {
 
             console.error(
-                "[Universe] ParticleSystem failed:",
+                "[Universe] ParticleSystem creation failed:",
                 error
             );
+
+
+            this.particleSystem =
+                null;
+
 
             this.showError(
                 error
             );
 
-            this.particleSystem =
-                null;
 
             return;
         }
 
+
+        /*
+         * -------------------------------------------------
+         * VALIDATE POINTS
+         * -------------------------------------------------
+         */
+
+        if (
+            !this.particleSystem.points
+        ) {
+
+            const error =
+                new Error(
+                    "ParticleSystem.points is missing."
+                );
+
+
+            this.particleSystem =
+                null;
+
+
+            this.showError(
+                error
+            );
+
+
+            return;
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * ADD TO SCENE
+         * -------------------------------------------------
+         */
 
         this.scene.add(
             this.particleSystem.points
         );
 
 
+        console.log(
+            "[Universe] ParticleSystem added to scene."
+        );
+
+
         /*
-         * -------------------------------------------------
+         * =================================================
          * OBSERVATION ORIENTATION
-         * -------------------------------------------------
+         * =================================================
          */
 
         if (
             nebula.observation
         ) {
 
+            const observation =
+                nebula.observation;
+
+
+            /*
+             * Rotation
+             */
+
             this.particleSystem
                 .points
                 .rotation.set(
 
-                    nebula.observation.pitch,
-                    nebula.observation.yaw,
-                    nebula.observation.roll
+                    Number(
+                        observation.pitch
+                    ) || 0,
+
+                    Number(
+                        observation.yaw
+                    ) || 0,
+
+                    Number(
+                        observation.roll
+                    ) || 0
                 );
 
 
+            /*
+             * Position
+             */
+
             if (
-                nebula.observation.position
+                observation.position &&
+                typeof observation.position.x ===
+                "number"
             ) {
 
                 this.particleSystem
                     .points
                     .position.copy(
-                        nebula.observation.position
+                        observation.position
                     );
             }
 
 
+            /*
+             * Scale
+             */
+
             if (
                 Number.isFinite(
-                    nebula.observation.scale
+                    observation.scale
                 )
             ) {
 
                 this.particleSystem
                     .points
                     .scale.setScalar(
-                        nebula.observation.scale
+                        observation.scale
                     );
             }
         }
 
 
         /*
-         * -------------------------------------------------
+         * =================================================
+         * CAMERA SAFETY
+         * =================================================
+         */
+
+        try {
+
+            const distance =
+                nebula?.observation?.distance;
+
+
+            if (
+                Number.isFinite(
+                    distance
+                ) &&
+                this.camera &&
+                this.camera.camera
+            ) {
+
+                this.camera.camera.position.z =
+                    distance;
+
+                console.log(
+                    "[Universe] Camera distance:",
+                    distance
+                );
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "[Universe] Camera setup skipped:",
+                error
+            );
+        }
+
+
+        /*
+         * =================================================
          * SUMMONING
-         * -------------------------------------------------
+         * =================================================
          */
 
         nebula.state =
@@ -676,9 +1054,18 @@ export class Universe {
             performance.now();
 
 
+        console.log(
+            "[Universe] SUMMONING..."
+        );
+
+
         this.summonTimer =
             setTimeout(
                 () => {
+
+                    /*
+                     * Old cycle?
+                     */
 
                     if (
                         currentCycle !==
@@ -688,6 +1075,10 @@ export class Universe {
                         return;
                     }
 
+
+                    /*
+                     * Different nebula?
+                     */
 
                     if (
                         this.nebula !==
@@ -712,7 +1103,7 @@ export class Universe {
 
 
                     console.log(
-                        "[Universe] Nebula stable."
+                        "[Universe] Nebula STABLE."
                     );
 
                 },
@@ -722,7 +1113,7 @@ export class Universe {
 
         console.log(
             "[Universe] Nebula ready:",
-            nebula.count,
+            nebula.count || 0,
             "particles"
         );
     }
@@ -740,7 +1131,9 @@ export class Universe {
     ) {
 
         /*
-         * Background stars.
+         * -------------------------------------------------
+         * STARS
+         * -------------------------------------------------
          */
 
         if (
@@ -754,7 +1147,9 @@ export class Universe {
 
 
         /*
-         * Background dust.
+         * -------------------------------------------------
+         * DUST
+         * -------------------------------------------------
          */
 
         if (
@@ -768,20 +1163,37 @@ export class Universe {
 
 
         /*
-         * Universe is allowed to render
-         * even while dependency loading.
+         * -------------------------------------------------
+         * PARTICLES
+         * -------------------------------------------------
          */
 
         if (
             this.particleSystem
         ) {
 
-            this.particleSystem.update(
-                time,
-                dt
-            );
+            try {
+
+                this.particleSystem.update(
+                    time,
+                    dt
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "[Universe] Particle update failed:",
+                    error
+                );
+            }
         }
 
+
+        /*
+         * -------------------------------------------------
+         * NO NEBULA
+         * -------------------------------------------------
+         */
 
         if (
             !this.nebula ||
@@ -793,7 +1205,9 @@ export class Universe {
 
 
         /*
-         * Natural rotation.
+         * =================================================
+         * NATURAL ROTATION
+         * =================================================
          */
 
         if (
@@ -845,6 +1259,11 @@ export class Universe {
                 case "STOP":
 
                     break;
+
+
+                default:
+
+                    break;
             }
         }
     }
@@ -867,12 +1286,10 @@ export class Universe {
 
 
         const {
-
             STATE,
             setPhase,
             CONFIG,
             shuffleParticles
-
         } =
             this.dependencies;
 
@@ -905,13 +1322,19 @@ export class Universe {
             );
 
 
-            this.nebula.state =
-                "STABLE";
+            if (
+                this.nebula
+            ) {
+
+                this.nebula.state =
+                    "STABLE";
+            }
 
 
             setPhase(
                 "EXPLORATION"
             );
+
 
         } catch (error) {
 
@@ -921,13 +1344,19 @@ export class Universe {
             );
 
 
-            this.nebula.state =
-                "STABLE";
+            if (
+                this.nebula
+            ) {
+
+                this.nebula.state =
+                    "STABLE";
+            }
 
 
             setPhase(
                 "EXPLORATION"
             );
+
 
         } finally {
 
@@ -939,7 +1368,7 @@ export class Universe {
 
     /*
      * =====================================================
-     * OBSERVATION
+     * OBSERVATION COMPLETE
      * =====================================================
      */
 
@@ -954,10 +1383,8 @@ export class Universe {
 
 
         const {
-
             STATE,
             runObservationEvent
-
         } =
             this.dependencies;
 
@@ -1001,7 +1428,7 @@ export class Universe {
 
     /*
      * =====================================================
-     * DISPOSE
+     * DISPOSE PARTICLE SYSTEM
      * =====================================================
      */
 
@@ -1015,30 +1442,56 @@ export class Universe {
         }
 
 
+        /*
+         * -------------------------------------------------
+         * REMOVE FROM SCENE
+         * -------------------------------------------------
+         */
+
         try {
 
-            this.scene.remove(
+            if (
                 this.particleSystem.points
-            );
+            ) {
+
+                this.scene.remove(
+                    this.particleSystem.points
+                );
+            }
 
         } catch (_) {}
 
 
+        /*
+         * -------------------------------------------------
+         * DISPOSE
+         * -------------------------------------------------
+         */
+
         try {
 
-            this.particleSystem.dispose();
+            if (
+                typeof this.particleSystem.dispose ===
+                "function"
+            ) {
 
-        } catch (_) {
+                this.particleSystem.dispose();
 
-            try {
+            } else {
 
                 this.particleSystem.geometry
                     ?.dispose();
 
                 this.particleSystem.material
                     ?.dispose();
+            }
 
-            } catch (_) {}
+        } catch (error) {
+
+            console.warn(
+                "[Universe] Particle dispose warning:",
+                error
+            );
         }
 
 
@@ -1081,44 +1534,70 @@ export class Universe {
                     "div"
                 );
 
+
             box.id =
                 "universeError";
+
 
             box.style.position =
                 "fixed";
 
+
             box.style.left =
                 "10px";
+
 
             box.style.right =
                 "10px";
 
+
             box.style.bottom =
                 "10px";
+
 
             box.style.zIndex =
                 "999999";
 
+
             box.style.padding =
                 "14px";
+
 
             box.style.background =
                 "rgba(120,0,0,0.92)";
 
+
             box.style.color =
                 "#ffffff";
+
 
             box.style.fontFamily =
                 "monospace";
 
+
             box.style.fontSize =
                 "13px";
+
+
+            box.style.lineHeight =
+                "1.5";
+
 
             box.style.whiteSpace =
                 "pre-wrap";
 
+
             box.style.pointerEvents =
                 "none";
+
+
+            box.style.border =
+                "1px solid rgba(255,255,255,0.2)";
+
+
+            box.style.borderRadius =
+                "8px";
+
 
             document.body.appendChild(
                 box
@@ -1129,5 +1608,90 @@ export class Universe {
         box.textContent =
             "[UNIVERSE ERROR]\n" +
             message;
+    }
+
+
+    /*
+     * =====================================================
+     * CLEANUP
+     * =====================================================
+     */
+
+    dispose() {
+
+        /*
+         * Cancel timer.
+         */
+
+        if (
+            this.summonTimer
+        ) {
+
+            clearTimeout(
+                this.summonTimer
+            );
+
+            this.summonTimer =
+                null;
+        }
+
+
+        /*
+         * Dispose particles.
+         */
+
+        this.disposeParticleSystem();
+
+
+        /*
+         * Remove stars.
+         */
+
+        if (
+            this.stars
+        ) {
+
+            try {
+
+                this.scene.remove(
+                    this.stars
+                );
+
+            } catch (_) {}
+        }
+
+
+        /*
+         * Remove dust.
+         */
+
+        if (
+            this.dust
+        ) {
+
+            try {
+
+                this.scene.remove(
+                    this.dust
+                );
+
+            } catch (_) {}
+        }
+
+
+        this.stars =
+            null;
+
+        this.dust =
+            null;
+
+        this.nebula =
+            null;
+
+        this.ready =
+            false;
+
+        this.loading =
+            false;
     }
 }
