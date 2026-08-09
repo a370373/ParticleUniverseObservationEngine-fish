@@ -34,9 +34,7 @@
             box.style.pointerEvents =
                 "none";
 
-            document.body.appendChild(
-                box
-            );
+            document.body.appendChild(box);
         }
 
         box.textContent +=
@@ -51,56 +49,25 @@
     }
 
 
-    /*
-     * =========================================================
-     * THIS MESSAGE APPEARS BEFORE IMPORTS.
-     *
-     * If this does NOT appear:
-     *
-     * → main.js itself did not execute.
-     * =========================================================
-     */
-
     debug(
         "MAIN MODULE EXECUTING"
     );
 
 
-    /*
-     * =========================================================
-     * DYNAMIC IMPORT DIAGNOSTIC
-     *
-     * Instead of static imports killing the module before
-     * we can see anything, load them one by one.
-     * =========================================================
-     */
-
     Promise.all([
 
         import("./core/renderer.js"),
-
         import("./core/camera.js"),
-
         import("./core/universe.js"),
-
         import("./observation/observer.js"),
-
         import("./universe/roaming.js"),
-
         import("./core/engine.js"),
-
         import("./navigation/desktop.js"),
-
         import("./navigation/mobile.js"),
-
         import("./media/image-library.js"),
-
         import("./core/state.js"),
-
         import("./media/audio.js"),
-
         import("./fallback/raw-webgl.js"),
-
         import("./fallback/canvas-fallback.js")
 
     ])
@@ -124,6 +91,7 @@
             );
 
             debug(
+                error?.stack ||
                 error?.message ||
                 String(error)
             );
@@ -139,12 +107,6 @@
         }
     );
 
-
-    /*
-     * =========================================================
-     * APPLICATION
-     * =========================================================
-     */
 
     function startApplication(
         modules
@@ -239,16 +201,11 @@
             canvasModule;
 
 
-        /*
-         * =====================================================
-         * CANVAS
-         * =====================================================
-         */
-
         const canvas =
             document.getElementById(
                 "universeCanvas"
             );
+
 
         if (!canvas) {
 
@@ -259,6 +216,7 @@
             return;
         }
 
+
         debug(
             "CANVAS OK"
         );
@@ -268,11 +226,13 @@
         let engine = null;
         let booted = false;
         let audioStarted = false;
+        let universe = null;
+        let observer = null;
 
 
         /*
          * =====================================================
-         * AUDIO EVENT
+         * AUDIO
          * =====================================================
          */
 
@@ -311,14 +271,13 @@
                     );
                 }
 
-            },
-            false
+            }
         );
 
 
         /*
          * =====================================================
-         * ENTRY EVENT
+         * ENTER
          * =====================================================
          */
 
@@ -337,16 +296,11 @@
                 );
 
 
-                /*
-                 * Audio backup.
-                 */
-
                 if (!audioStarted) {
 
                     try {
 
-                        audioStarted =
-                            true;
+                        audioStarted = true;
 
                         initAudio();
 
@@ -359,7 +313,11 @@
                     } catch (error) {
 
                         debug(
-                            "AUDIO BACKUP ERROR"
+                            "AUDIO BACKUP ERROR: " +
+                            (
+                                error?.message ||
+                                String(error)
+                            )
                         );
                     }
                 }
@@ -376,6 +334,7 @@
                     );
 
                     debug(
+                        error?.stack ||
                         error?.message ||
                         String(error)
                     );
@@ -417,7 +376,7 @@
 
         /*
          * =====================================================
-         * BOOT UNIVERSE
+         * BOOT
          * =====================================================
          */
 
@@ -427,10 +386,12 @@
                 "CREATING RENDERER"
             );
 
+
             runtime =
                 await createRenderer(
                     canvas
                 );
+
 
             if (!runtime) {
 
@@ -439,18 +400,16 @@
                 );
             }
 
+
             STATE.rendererMode =
                 runtime.mode;
+
 
             debug(
                 "RENDERER: " +
                 runtime.mode
             );
 
-
-            /*
-             * Canvas fallback
-             */
 
             if (
                 runtime.mode ===
@@ -468,10 +427,6 @@
                 return;
             }
 
-
-            /*
-             * Raw WebGL
-             */
 
             if (
                 runtime.mode ===
@@ -498,15 +453,12 @@
             }
 
 
-            /*
-             * Three.js
-             */
-
             const THREE =
                 runtime.THREE;
 
             const renderer =
                 runtime.renderer;
+
 
             if (!THREE) {
 
@@ -515,6 +467,7 @@
                 );
             }
 
+
             if (!renderer) {
 
                 throw new Error(
@@ -522,17 +475,15 @@
                 );
             }
 
+
             debug(
                 "THREE.JS OK"
             );
 
 
-            /*
-             * Scene
-             */
-
             const scene =
                 new THREE.Scene();
+
 
             scene.background =
                 new THREE.Color(
@@ -540,18 +491,16 @@
                 );
 
 
-            /*
-             * Camera
-             */
-
             const cameraController =
                 new CameraController(
                     THREE
                 );
 
+
             const camera =
                 cameraController
                     .createCamera();
+
 
             debug(
                 "CAMERA OK"
@@ -559,26 +508,34 @@
 
 
             /*
-             * Universe
+             * IMPORTANT:
+             * Make sure camera begins at
+             * a sane visible distance.
              */
 
-            const universe =
+            if (
+                camera.position.z === 0
+            ) {
+
+                camera.position.z =
+                    120;
+            }
+
+
+            universe =
                 new Universe(
                     THREE,
                     scene,
                     cameraController
                 );
 
+
             debug(
                 "UNIVERSE CREATED"
             );
 
 
-            /*
-             * Observer
-             */
-
-            const observer =
+            observer =
                 new Observer(
                     THREE,
                     cameraController,
@@ -589,20 +546,12 @@
                 );
 
 
-            /*
-             * Roaming
-             */
-
             const roaming =
                 new UniverseRoaming(
                     THREE,
                     scene
                 );
 
-
-            /*
-             * Controls
-             */
 
             initDesktopControls(
                 canvas,
@@ -614,6 +563,7 @@
                 }
             );
 
+
             initMobileControls(
                 canvas,
                 cameraController,
@@ -624,19 +574,23 @@
                 }
             );
 
+
             debug(
                 "CONTROLS OK"
             );
 
 
             /*
-             * Image upload
+             * =================================================
+             * IMAGE UPLOAD
+             * =================================================
              */
 
             const imageInput =
                 document.getElementById(
                     "imageInput"
                 );
+
 
             if (imageInput) {
 
@@ -646,9 +600,9 @@
 
                         const files =
                             Array.from(
-                                event.target.files ||
-                                []
+                                event.target.files || []
                             );
+
 
                         for (
                             const file of files
@@ -663,6 +617,7 @@
                                 continue;
                             }
 
+
                             try {
 
                                 const base64 =
@@ -670,31 +625,97 @@
                                         file
                                     );
 
-                                addBase64Image(
-                                    base64
+
+                                const added =
+                                    addBase64Image(
+                                        base64
+                                    );
+
+
+                                debug(
+                                    added
+                                        ? "IMAGE ADDED"
+                                        : "IMAGE REJECTED"
+                                );
+
+
+                            } catch (error) {
+
+                                debug(
+                                    "IMAGE ERROR: " +
+                                    (
+                                        error?.message ||
+                                        String(error)
+                                    )
+                                );
+                            }
+                        }
+
+
+                        imageInput.value = "";
+
+
+                        /*
+                         * Immediately generate
+                         * a new universe after upload.
+                         */
+
+                        if (universe) {
+
+                            try {
+
+                                debug(
+                                    "GENERATING FROM UPLOADED IMAGE"
+                                );
+
+                                await universe
+                                    .startNewCycle();
+
+                                if (observer) {
+
+                                    observer.reset();
+                                }
+
+                                debug(
+                                    "UPLOADED IMAGE UNIVERSE READY"
                                 );
 
                             } catch (error) {
 
                                 debug(
-                                    "IMAGE ERROR"
+                                    "UPLOAD UNIVERSE ERROR: " +
+                                    (
+                                        error?.message ||
+                                        String(error)
+                                    )
                                 );
                             }
                         }
 
-                        imageInput.value = "";
                     }
                 );
             }
 
 
             /*
-             * Resize
+             * =================================================
+             * RESIZE
+             * =================================================
              */
 
             function resize() {
 
-                cameraController.resize();
+                try {
+
+                    cameraController.resize();
+
+                } catch (error) {
+
+                    debug(
+                        "CAMERA RESIZE ERROR"
+                    );
+                }
+
 
                 renderer.setSize(
                     window.innerWidth,
@@ -702,30 +723,34 @@
                     false
                 );
 
+
                 if (
                     renderer.setPixelRatio
                 ) {
 
                     renderer.setPixelRatio(
                         Math.min(
-                            window.devicePixelRatio ||
-                            1,
+                            window.devicePixelRatio || 1,
                             2
                         )
                     );
                 }
             }
 
+
             window.addEventListener(
                 "resize",
                 resize
             );
 
+
             resize();
 
 
             /*
-             * Next nebula
+             * =================================================
+             * NEXT NEBULA
+             * =================================================
              */
 
             window.__generateNextNebula =
@@ -733,22 +758,35 @@
 
                     try {
 
+                        debug(
+                            "NEXT NEBULA"
+                        );
+
                         await universe
                             .startNewCycle();
 
-                        observer.reset();
+                        if (observer) {
+
+                            observer.reset();
+                        }
 
                     } catch (error) {
 
                         debug(
-                            "NEXT NEBULA ERROR"
+                            "NEXT NEBULA ERROR: " +
+                            (
+                                error?.message ||
+                                String(error)
+                            )
                         );
                     }
                 };
 
 
             /*
-             * Engine
+             * =================================================
+             * ENGINE
+             * =================================================
              */
 
             engine =
@@ -762,32 +800,25 @@
                     roaming
                 );
 
+
             debug(
                 "ENGINE CREATED"
             );
 
 
-            /*
-             * Start
-             */
-
             engine.start();
+
 
             debug(
                 "ENGINE STARTED"
             );
+
 
             debug(
                 "SYSTEM ONLINE"
             );
         }
 
-
-        /*
-         * =====================================================
-         * FILE → BASE64
-         * =====================================================
-         */
 
         function fileToBase64(file) {
 
@@ -797,6 +828,7 @@
                     const reader =
                         new FileReader();
 
+
                     reader.onload =
                         function () {
 
@@ -804,6 +836,7 @@
                                 reader.result
                             );
                         };
+
 
                     reader.onerror =
                         function () {
@@ -815,6 +848,7 @@
                                 )
                             );
                         };
+
 
                     reader.readAsDataURL(
                         file
