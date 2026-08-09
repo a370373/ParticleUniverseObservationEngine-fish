@@ -5,25 +5,33 @@
  *
  * Observation Controller
  *
- * 負責：
+ * Flow:
  *
- * 1. 取得 Nebula
- * 2. 呼叫 ObservationDetector
- * 3. 維持 HOLD
- * 4. Observation Complete
- * 5. Observation Timeout
+ * similarity.js
+ *      ↓
+ * ObservationDetector
+ *      ↓
+ * Observer
+ *      ↓
+ * STATE.observationComplete
+ *      ↓
+ * Universe
+ *      ↓
+ * observation-event.js
  *
- * Observer 不負責：
+ * Observer ONLY owns:
+ * - observation window
+ * - hold timer
+ * - completion
+ * - timeout
  *
- * - Audio
- * - Collapse
- * - Explosion
- * - Shuffle
- * - Camera animation
- * - Observation Event
- *
- * Universe / Observation Event
- * 負責後續事件。
+ * Observer does NOT own:
+ * - audio
+ * - collapse
+ * - explosion
+ * - shuffle
+ * - camera animation
+ * - observation event
  * =========================================================
  */
 
@@ -52,74 +60,43 @@ export class Observer {
             "[Observer] CONSTRUCTOR"
         );
 
-
         this.THREE =
             THREE;
-
 
         this.cameraController =
             cameraController;
 
-
         this.nebulaProvider =
             nebulaProvider;
-
-
-        /*
-         * =================================================
-         * DETECTOR
-         * =================================================
-         */
 
         this.detector =
             new ObservationDetector(
                 cameraController
             );
 
-
-        /*
-         * =================================================
-         * STATE
-         * =================================================
-         */
-
         this.started =
             false;
-
 
         this.completed =
             false;
 
-
         this.failed =
             false;
-
 
         this.observationStart =
             0;
 
-
         this.holdStart =
             0;
-
 
         this.holdDuration =
             this.getHoldDuration();
 
-
-        /*
-         * =================================================
-         * DEBUG
-         * =================================================
-         */
-
         this.lastScore =
             0;
 
-
         this.lastResult =
             null;
-
 
         console.log(
             "[Observer] READY"
@@ -137,40 +114,34 @@ export class Observer {
         now = performance.now()
     ) {
 
-        /*
-         * -------------------------------------------------
-         * Already completed
-         * -------------------------------------------------
-         */
-
         if (
             this.completed
         ) {
 
-            return {
+            return this.result(
+                true,
+                false,
+                false,
+                1
+            );
+        }
 
-                completed:
-                    true,
 
-                failed:
-                    false,
+        if (
+            this.failed
+        ) {
 
-                observing:
-                    false,
-
-                score:
-                    1,
-
-                progress:
-                    1
-            };
+            return this.result(
+                false,
+                true,
+                false,
+                0
+            );
         }
 
 
         /*
-         * -------------------------------------------------
-         * Major event lock
-         * -------------------------------------------------
+         * Global event/control lock.
          */
 
         if (
@@ -181,32 +152,14 @@ export class Observer {
 
             this.resetHold();
 
-
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                observing:
-                    false,
-
-                score:
-                    0,
-
-                progress:
-                    0
-            };
+            return this.result(
+                false,
+                false,
+                false,
+                0
+            );
         }
 
-
-        /*
-         * -------------------------------------------------
-         * Nebula
-         * -------------------------------------------------
-         */
 
         const nebula =
             this.getNebula();
@@ -218,31 +171,17 @@ export class Observer {
 
             this.resetHold();
 
-
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                observing:
-                    false,
-
-                score:
-                    0,
-
-                progress:
-                    0
-            };
+            return this.result(
+                false,
+                false,
+                false,
+                0
+            );
         }
 
 
         /*
-         * -------------------------------------------------
-         * Stable only
-         * -------------------------------------------------
+         * Only stable nebula can be observed.
          */
 
         if (
@@ -252,31 +191,17 @@ export class Observer {
 
             this.resetHold();
 
-
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                observing:
-                    false,
-
-                score:
-                    0,
-
-                progress:
-                    0
-            };
+            return this.result(
+                false,
+                false,
+                false,
+                0
+            );
         }
 
 
         /*
-         * -------------------------------------------------
-         * Start timeout timer
-         * -------------------------------------------------
+         * Start observation window.
          */
 
         if (
@@ -286,46 +211,115 @@ export class Observer {
             this.started =
                 true;
 
+            this.failed =
+                false;
+
+            this.completed =
+                false;
 
             this.observationStart =
                 now;
 
-
             STATE.observationStarted =
                 true;
+
+            console.log(
+                "[Observer] OBSERVATION STARTED"
+            );
         }
 
 
         /*
-         * -------------------------------------------------
-         * Detector
-         *
-         * similarity.js
-         *      ↓
-         * Detector
-         *      ↓
-         * Observer
-         * -------------------------------------------------
+         * Timeout is checked independently
+         * from detector validity.
          */
 
-        const result =
-            this.detector.update(
-                nebula
+        if (
+            this.hasObservationTimedOut(
+                now
+            )
+        ) {
+
+            return this.timeout();
+        }
+
+
+        /*
+         * Detector.
+         */
+
+        let result;
+
+        try {
+
+            result =
+                this.detector.update(
+                    nebula
+                );
+
+        } catch (error) {
+
+            console.error(
+                "[Observer] DETECTOR ERROR:",
+                error
             );
 
+            this.resetHold();
+
+            return this.result(
+                false,
+                false,
+                false,
+                0
+            );
+        }
+
+
+        /*
+         * Invalid detector result.
+         */
+
+        if (
+            !result ||
+            typeof result !==
+            "object"
+        ) {
+
+            this.resetHold();
+
+            return this.result(
+                false,
+                false,
+                false,
+                0
+            );
+        }
+
+
+        /*
+         * Score.
+         */
 
         this.lastScore =
-            result.score;
-
+            Number.isFinite(
+                Number(
+                    result.score
+                )
+            )
+                ? Number(
+                    result.score
+                )
+                : 0;
 
         this.lastResult =
             result;
 
+        nebula.observationScore =
+            this.lastScore;
+
 
         /*
-         * -------------------------------------------------
-         * TARGET VALID
-         * -------------------------------------------------
+         * Target acquired.
          */
 
         if (
@@ -340,7 +334,6 @@ export class Observer {
                 this.holdStart =
                     now;
 
-
                 console.log(
                     "[Observer] TARGET ACQUIRED"
                 );
@@ -348,8 +341,11 @@ export class Observer {
 
 
             const held =
-                now -
-                this.holdStart;
+                Math.max(
+                    0,
+                    now -
+                    this.holdStart
+                );
 
 
             const progress =
@@ -366,15 +362,12 @@ export class Observer {
             nebula.observationHold =
                 held;
 
-
             STATE.observationProgress =
                 progress;
 
 
             /*
-             * -------------------------------------------------
-             * COMPLETE
-             * -------------------------------------------------
+             * Hold complete.
              */
 
             if (
@@ -389,30 +382,17 @@ export class Observer {
             }
 
 
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    false,
-
-                observing:
-                    true,
-
-                score:
-                    result.score,
-
-                progress:
-                    progress
-            };
+            return this.result(
+                false,
+                false,
+                true,
+                progress
+            );
         }
 
 
         /*
-         * -------------------------------------------------
-         * TARGET LOST
-         * -------------------------------------------------
+         * Target lost.
          */
 
         if (
@@ -429,67 +409,44 @@ export class Observer {
         this.resetHold();
 
 
-        /*
-         * -------------------------------------------------
-         * TIMEOUT
-         * -------------------------------------------------
-         */
-
-        if (
-            this.hasObservationTimedOut(
-                now
-            )
-        ) {
-
-            this.failed =
-                true;
+        return this.result(
+            false,
+            false,
+            false,
+            0
+        );
+    }
 
 
-            STATE.observationProgress =
-                0;
+    /*
+     * =====================================================
+     * RESULT
+     * =====================================================
+     */
 
-
-            console.warn(
-                "[Observer] OBSERVATION TIMEOUT"
-            );
-
-
-            return {
-
-                completed:
-                    false,
-
-                failed:
-                    true,
-
-                observing:
-                    false,
-
-                score:
-                    result.score,
-
-                progress:
-                    0
-            };
-        }
-
+    result(
+        completed,
+        failed,
+        observing,
+        progress
+    ) {
 
         return {
 
             completed:
-                false,
+                completed,
 
             failed:
-                false,
+                failed,
 
             observing:
-                false,
+                observing,
 
             score:
-                result.score,
+                this.lastScore,
 
             progress:
-                0
+                progress
         };
     }
 
@@ -509,43 +466,32 @@ export class Observer {
             this.completed
         ) {
 
-            return {
-
-                completed:
-                    true,
-
-                failed:
-                    false,
-
-                observing:
-                    false,
-
-                score:
-                    1,
-
-                progress:
-                    1
-            };
+            return this.result(
+                true,
+                false,
+                false,
+                1
+            );
         }
 
 
         this.completed =
             true;
 
-
         this.failed =
             false;
-
 
         this.holdStart =
             0;
 
 
+        STATE.observationComplete =
+            true;
+
         STATE.observationProgress =
             1;
 
-
-        STATE.observationComplete =
+        STATE.observationStarted =
             true;
 
 
@@ -554,8 +500,7 @@ export class Observer {
         ) {
 
             nebula.observationScore =
-                1;
-
+                this.lastScore;
 
             nebula.observationHold =
                 this.holdDuration;
@@ -567,41 +512,61 @@ export class Observer {
         );
 
 
-        /*
-         * IMPORTANT
-         * -------------------------------------------------
-         *
-         * Observer does NOT call:
-         *
-         * universe.completeObservation()
-         *
-         * Observer only marks observation complete.
-         *
-         * Universe should detect:
-         *
-         * STATE.observationComplete
-         *
-         * and start observation-event.js.
-         */
+        return this.result(
+            true,
+            false,
+            false,
+            1
+        );
+    }
 
 
-        return {
+    /*
+     * =====================================================
+     * TIMEOUT
+     * =====================================================
+     */
 
-            completed:
-                true,
+    timeout() {
 
-            failed:
+        if (
+            this.failed
+        ) {
+
+            return this.result(
                 false,
-
-            observing:
                 true,
+                false,
+                0
+            );
+        }
 
-            score:
-                result.score,
 
-            progress:
-                1
-        };
+        this.failed =
+            true;
+
+        this.holdStart =
+            0;
+
+
+        STATE.observationProgress =
+            0;
+
+        STATE.observationStarted =
+            false;
+
+
+        console.warn(
+            "[Observer] OBSERVATION TIMEOUT"
+        );
+
+
+        return this.result(
+            false,
+            true,
+            false,
+            0
+        );
     }
 
 
@@ -616,26 +581,20 @@ export class Observer {
         this.started =
             false;
 
-
         this.completed =
             false;
-
 
         this.failed =
             false;
 
-
         this.observationStart =
             0;
-
 
         this.holdStart =
             0;
 
-
         this.lastScore =
             0;
-
 
         this.lastResult =
             null;
@@ -644,16 +603,24 @@ export class Observer {
         STATE.observationStarted =
             false;
 
-
         STATE.observationComplete =
             false;
-
 
         STATE.observationProgress =
             0;
 
 
-        this.detector.reset();
+        try {
+
+            this.detector?.reset?.();
+
+        } catch (error) {
+
+            console.warn(
+                "[Observer] DETECTOR RESET ERROR:",
+                error
+            );
+        }
 
 
         console.log(
@@ -672,7 +639,6 @@ export class Observer {
 
         this.holdStart =
             0;
-
 
         STATE.observationProgress =
             0;
@@ -696,7 +662,7 @@ export class Observer {
      * =====================================================
      * GET NEBULA
      * =====================================================
- */
+     */
 
     getNebula() {
 
@@ -740,14 +706,15 @@ export class Observer {
             this.observationStart =
                 now;
 
-
             return false;
         }
 
 
         const configured =
-            CONFIG?.OBSERVATION
-                ?.MAX_TIME;
+            Number(
+                CONFIG?.OBSERVATION
+                    ?.MAX_TIME
+            );
 
 
         const minimum =
@@ -758,17 +725,11 @@ export class Observer {
 
         const timeout =
             Math.max(
-
                 minimum,
-
                 Number.isFinite(
-                    Number(
-                        configured
-                    )
+                    configured
                 )
-                    ? Number(
-                        configured
-                    )
+                    ? configured
                     : minimum
             );
 
@@ -789,24 +750,22 @@ export class Observer {
 
     getHoldDuration() {
 
-        const value =
-            CONFIG?.OBSERVATION
-                ?.HOLD_TIME;
+        const number =
+            Number(
+                CONFIG?.OBSERVATION
+                    ?.HOLD_TIME
+            );
 
 
         if (
             Number.isFinite(
-                Number(
-                    value
-                )
+                number
             )
         ) {
 
             return Math.max(
                 500,
-                Number(
-                    value
-                )
+                number
             );
         }
 
@@ -834,6 +793,9 @@ export class Observer {
             failed:
                 this.failed,
 
+            observationStart:
+                this.observationStart,
+
             holdStart:
                 this.holdStart,
 
@@ -847,8 +809,15 @@ export class Observer {
                 this.lastResult,
 
             detector:
-                this.detector
-                    .getDebugState()
+                this.detector &&
+                typeof this.detector
+                    .getDebugState ===
+                "function"
+
+                    ? this.detector
+                        .getDebugState()
+
+                    : null
         };
     }
 }

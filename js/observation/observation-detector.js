@@ -2,36 +2,6 @@
  * =========================================================
  * PARTICLE UNIVERSE
  * OBSERVATION DETECTOR
- *
- * Observation Validator
- *
- * 負責：
- *
- * Camera
- *   ↓
- * Nebula
- *   ↓
- * similarity.js
- *   ↓
- * Observation Result
- *
- * IMPORTANT
- * ---------------------------------------------------------
- * Detector 不自己計算 Rotation / Distance / Position /
- * Scale。
- *
- * 所有 similarity calculation 都交給：
- *
- * similarity.js
- *
- * Detector 不負責：
- *
- * - Hold
- * - Timeout
- * - Observation Event
- * - Audio
- * - Particle
- * - STATE
  * =========================================================
  */
 
@@ -54,18 +24,14 @@ export class ObservationDetector {
         this.cameraController =
             cameraController;
 
-
         this.currentNebula =
             null;
-
 
         this.lastScore =
             0;
 
-
         this.lastResult =
             null;
-
 
         this.active =
             false;
@@ -76,12 +42,6 @@ export class ObservationDetector {
         );
     }
 
-
-    /*
-     * =====================================================
-     * ATTACH
-     * =====================================================
-     */
 
     attach(
         nebula
@@ -104,14 +64,11 @@ export class ObservationDetector {
         this.currentNebula =
             nebula;
 
-
         this.active =
             true;
 
-
         this.lastScore =
             0;
-
 
         this.lastResult =
             null;
@@ -119,7 +76,6 @@ export class ObservationDetector {
 
         nebula.observationScore =
             0;
-
 
         nebula.observationHold =
             0;
@@ -134,26 +90,16 @@ export class ObservationDetector {
     }
 
 
-    /*
-     * =====================================================
-     * UPDATE
-     * =====================================================
-     */
-
     update(
         nebula = null
     ) {
 
         /*
-         * Observer may provide the current
-         * nebula directly.
-         *
-         * This removes the dependency on
-         * manually calling attach() every frame.
+         * Automatically switch target nebula.
          */
 
         if (
-            nebula
+            nebula !== null
         ) {
 
             if (
@@ -167,18 +113,11 @@ export class ObservationDetector {
 
             } else {
 
-                this.currentNebula =
-                    nebula;
-
                 this.active =
                     true;
             }
         }
 
-
-        /*
-         * No target.
-         */
 
         if (
             !this.active ||
@@ -192,10 +131,6 @@ export class ObservationDetector {
         const currentNebula =
             this.currentNebula;
 
-
-        /*
-         * Only STABLE nebula can be observed.
-         */
 
         if (
             currentNebula.state !==
@@ -218,12 +153,6 @@ export class ObservationDetector {
         }
 
 
-        /*
-         * =================================================
-         * SINGLE SCORE SOURCE
-         * =================================================
-         */
-
         const result =
             calculateObservationScore(
                 camera,
@@ -232,7 +161,15 @@ export class ObservationDetector {
 
 
         this.lastScore =
-            result.score;
+            Number.isFinite(
+                Number(
+                    result?.score
+                )
+            )
+                ? Number(
+                    result.score
+                )
+                : 0;
 
 
         this.lastResult =
@@ -240,43 +177,28 @@ export class ObservationDetector {
 
 
         currentNebula.observationScore =
-            result.score;
+            this.lastScore;
 
 
         return result;
     }
 
 
-    /*
-     * =====================================================
-     * RESET
-     * =====================================================
-     */
-
     reset() {
 
         this.currentNebula =
             null;
 
-
         this.active =
             false;
 
-
         this.lastScore =
             0;
-
 
         this.lastResult =
             null;
     }
 
-
-    /*
-     * =====================================================
-     * CAMERA
-     * =====================================================
-     */
 
     getCamera() {
 
@@ -295,17 +217,10 @@ export class ObservationDetector {
     }
 
 
-    /*
-     * =====================================================
-     * INVALID RESULT
-     * =====================================================
-     */
-
     invalidResult() {
 
         this.lastScore =
             0;
-
 
         this.lastResult =
             null;
@@ -318,6 +233,15 @@ export class ObservationDetector {
 
             score:
                 0,
+
+            geometryScore:
+                0,
+
+            imageSimilarityScore:
+                0,
+
+            imageSimilarityAvailable:
+                false,
 
             rotationScore:
                 0,
@@ -347,16 +271,22 @@ export class ObservationDetector {
                 Infinity,
 
             scaleError:
-                Infinity
+                Infinity,
+
+            cameraDistance:
+                0,
+
+            targetDistance:
+                0,
+
+            actualScale:
+                1,
+
+            targetScale:
+                1
         };
     }
 
-
-    /*
-     * =====================================================
-     * DEBUG
-     * =====================================================
-     */
 
     getDebugState() {
 
