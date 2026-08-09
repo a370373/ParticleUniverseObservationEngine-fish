@@ -1,86 +1,322 @@
+/*
+ * =========================================================
+ * PARTICLE UNIVERSE
+ * PARTICLE SHUFFLE
+ *
+ * Stable Particle Shuffle
+ *
+ * Original Positions
+ *        ↓
+ * Temporary Expansion
+ *        ↓
+ * Randomized Displacement
+ *        ↓
+ * Return To Original Positions
+ *        ↓
+ * Stable
+ * =========================================================
+ */
+
+
+/*
+ * =========================================================
+ * SHUFFLE PARTICLES
+ * =========================================================
+ */
+
 export function shuffleParticles(
     particleSystem,
-    duration
+    duration = 1200
 ) {
+
+    if (
+        !particleSystem
+    ) {
+
+        throw new Error(
+            "shuffleParticles(): particleSystem is required."
+        );
+    }
+
 
     const data =
         particleSystem.data;
 
+
+    if (
+        !data
+    ) {
+
+        throw new Error(
+            "shuffleParticles(): particleSystem.data is missing."
+        );
+    }
+
+
+    const geometry =
+        particleSystem.geometry;
+
+
+    const positionAttribute =
+        geometry
+            ?.attributes
+            ?.position;
+
+
+    if (
+        !positionAttribute
+    ) {
+
+        throw new Error(
+            "shuffleParticles(): position attribute is missing."
+        );
+    }
+
+
+    const positions =
+        positionAttribute.array;
+
+
+    const count =
+        Number.isFinite(
+            data.count
+        )
+            ? data.count
+            : Math.floor(
+                positions.length / 3
+            );
+
+
+    if (
+        count <= 0
+    ) {
+
+        return Promise.resolve();
+    }
+
+
+    /*
+     * Prevent invalid duration.
+     */
+
+    duration =
+        Math.max(
+            1,
+            Number(
+                duration
+            ) || 1
+        );
+
+
+    /*
+     * =====================================================
+     * SAVE ORIGINAL POSITIONS
+     * =====================================================
+     *
+     * Important:
+     *
+     * Never continuously add velocity to the
+     * live position array.
+     *
+     * Instead:
+     *
+     * original → temporary offset → original
+     *
+     */
+
+    const originalPositions =
+        new Float32Array(
+            count * 3
+        );
+
+
+    originalPositions.set(
+        positions.subarray(
+            0,
+            count * 3
+        )
+    );
+
+
+    /*
+     * =====================================================
+     * RANDOM OFFSETS
+     * =====================================================
+     */
+
+    const offsets =
+        new Float32Array(
+            count * 3
+        );
+
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        const n =
+            i * 3;
+
+
+        let x =
+            Math.random() * 2 - 1;
+
+
+        let y =
+            Math.random() * 2 - 1;
+
+
+        let z =
+            Math.random() * 2 - 1;
+
+
+        const length =
+            Math.sqrt(
+                x * x +
+                y * y +
+                z * z
+            ) || 1;
+
+
+        /*
+         * Normalize random direction.
+         */
+
+        x /=
+            length;
+
+
+        y /=
+            length;
+
+
+        z /=
+            length;
+
+
+        /*
+         * Random displacement.
+         *
+         * Keep this relatively small so
+         * shuffle remains visually controlled.
+         */
+
+        const distance =
+            1 +
+            Math.random() * 3;
+
+
+        offsets[n] =
+            x *
+            distance;
+
+
+        offsets[n + 1] =
+            y *
+            distance;
+
+
+        offsets[n + 2] =
+            z *
+            distance;
+    }
+
+
+    /*
+     * =====================================================
+     * STATE
+     * =====================================================
+     */
+
+    const previousState =
+        data.state;
+
+
     data.state =
         "SHUFFLE";
+
+
+    /*
+     * =====================================================
+     * ANIMATION
+     * =====================================================
+     */
 
     const start =
         performance.now();
 
-    const positions =
-        particleSystem
-            .geometry
-            .attributes
-            .position
-            .array;
 
-    const velocities =
-        new Float32Array(
-            data.count * 3
-        );
+    return new Promise(
+        resolve => {
 
-    for (
-        let i = 0;
-        i < data.count;
-        i++
-    ) {
+            let finished =
+                false;
 
-        const n = i * 3;
 
-        const x =
-            Math.random() * 2 - 1;
+            function finish() {
 
-        const y =
-            Math.random() * 2 - 1;
+                if (
+                    finished
+                ) {
 
-        const z =
-            Math.random() * 2 - 1;
+                    return;
+                }
 
-        const length =
-            Math.sqrt(
-                x*x +
-                y*y +
-                z*z
-            ) || 1;
 
-        velocities[n] =
-            x / length *
-            (1 + Math.random() * 3);
+                finished =
+                    true;
 
-        velocities[n + 1] =
-            y / length *
-            (1 + Math.random() * 3);
 
-        velocities[n + 2] =
-            z / length *
-            (1 + Math.random() * 3);
-    }
+                /*
+                 * Guarantee exact original
+                 * positions.
+                 */
 
-    return new Promise(resolve => {
-
-        function animate(now) {
-
-            const elapsed =
-                now - start;
-
-            const progress =
-                Math.min(
-                    1,
-                    elapsed / duration
+                positions.set(
+                    originalPositions
                 );
 
-            for (
-                let i = 0;
-                i < data.count;
-                i++
+
+                positionAttribute
+                    .needsUpdate =
+                    true;
+
+
+                data.state =
+                    previousState ||
+                    "STABLE";
+
+
+                resolve();
+            }
+
+
+            function animate(
+                now
             ) {
 
-                const n = i * 3;
+                const elapsed =
+                    now -
+                    start;
+
+
+                const progress =
+                    Math.min(
+                        1,
+                        elapsed /
+                        duration
+                    );
+
+
+                /*
+                 * Smooth out-and-back.
+                 *
+                 * sin(πt)
+                 *
+                 * 0 → 1 → 0
+                 */
 
                 const factor =
                     Math.sin(
@@ -88,42 +324,60 @@ export function shuffleParticles(
                         Math.PI
                     );
 
-                positions[n] +=
-                    velocities[n] *
-                    factor;
 
-                positions[n + 1] +=
-                    velocities[n + 1] *
-                    factor;
+                for (
+                    let i = 0;
+                    i < count;
+                    i++
+                ) {
 
-                positions[n + 2] +=
-                    velocities[n + 2] *
-                    factor;
-            }
+                    const n =
+                        i * 3;
 
-            particleSystem
-                .geometry
-                .attributes
-                .position
-                .needsUpdate = true;
 
-            if (progress < 1) {
+                    positions[n] =
+                        originalPositions[n] +
+                        offsets[n] *
+                        factor;
+
+
+                    positions[n + 1] =
+                        originalPositions[n + 1] +
+                        offsets[n + 1] *
+                        factor;
+
+
+                    positions[n + 2] =
+                        originalPositions[n + 2] +
+                        offsets[n + 2] *
+                        factor;
+                }
+
+
+                positionAttribute
+                    .needsUpdate =
+                    true;
+
+
+                if (
+                    progress >= 1
+                ) {
+
+                    finish();
+
+                    return;
+                }
+
 
                 requestAnimationFrame(
                     animate
                 );
-
-            } else {
-
-                data.state =
-                    "STABLE";
-
-                resolve();
             }
-        }
 
-        requestAnimationFrame(
-            animate
-        );
-    });
+
+            requestAnimationFrame(
+                animate
+            );
+        }
+    );
 }
