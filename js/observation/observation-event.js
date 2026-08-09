@@ -4,29 +4,24 @@
  * OBSERVATION EVENT
  *
  * Observation Complete
- *      ↓
- * Music Fade
- *      ↓
- * Input Lock
- *      ↓
- * Nebula Collapse
- *      ↓
+ *        ↓
+ * Operation Lock
+ *        ↓
+ * Audio Fade Out
+ *        ↓
+ * Particle Collapse
+ *        ↓
  * Singularity
- *      ↓
- * Energy Explosion
- *      ↓
- * Camera Shock / Pullback
- *      ↓
- * Music Restore
- *      ↓
- * New Observation Cycle
+ *        ↓
+ * Energy Burst
+ *        ↓
+ * Particle Explosion
+ *        ↓
+ * Camera Shock / Pull Back
+ *        ↓
+ * Event Complete
  * =========================================================
  */
-
-import {
-    fadeMusicOut,
-    restoreMusic
-} from "../media/audio.js";
 
 import {
     STATE,
@@ -40,44 +35,7 @@ import {
 
 /*
  * =========================================================
- * DEFAULT EVENT CONFIG
- *
- * CONFIG 裡面即使還沒有這些欄位，
- * 也會使用下面的安全預設值。
- * =========================================================
- */
-
-const DEFAULTS = {
-
-    COLLAPSE_DURATION:
-        8500,
-
-    EXPLOSION_DURATION:
-        5500,
-
-    CAMERA_PULL:
-        0.025,
-
-    CAMERA_EXPLOSION:
-        0.8,
-
-    CAMERA_SHAKE:
-        0.35,
-
-    SINGULARITY_HOLD:
-        350,
-
-    FADE_OUT:
-        true,
-
-    RESTORE_MUSIC:
-        true
-};
-
-
-/*
- * =========================================================
- * PUBLIC EVENT
+ * MAIN EVENT
  * =========================================================
  */
 
@@ -87,25 +45,17 @@ export async function runObservationEvent(
 ) {
 
     console.log(
-        "[ObservationEvent] START"
+        "[Observation] EVENT START"
     );
 
-
-    /*
-     * =====================================================
-     * SAFETY
-     * =====================================================
-     */
 
     if (
         !camera
     ) {
 
-        console.error(
-            "[ObservationEvent] CAMERA MISSING"
+        throw new Error(
+            "Observation requires a camera."
         );
-
-        return;
     }
 
 
@@ -113,24 +63,26 @@ export async function runObservationEvent(
         !particleSystem
     ) {
 
-        console.error(
-            "[ObservationEvent] PARTICLE SYSTEM MISSING"
+        throw new Error(
+            "Observation requires a particle system."
         );
-
-        return;
     }
 
 
     if (
-        STATE.observationLocked
+        STATE.observationEvent
     ) {
 
-        console.log(
-            "[ObservationEvent] ALREADY LOCKED"
+        console.warn(
+            "[Observation] EVENT ALREADY RUNNING"
         );
 
         return;
     }
+
+
+    STATE.observationEvent =
+        true;
 
 
     /*
@@ -139,357 +91,781 @@ export async function runObservationEvent(
      * =====================================================
      */
 
-    STATE.observationLocked =
-        true;
-
-
-    document.body.classList.add(
-        "observation-lock"
-    );
+    lockControls();
 
 
     setPhase(
-        "OBSERVATION_COMPLETE"
+        "OBSERVATION_EVENT"
     );
 
 
+    try {
+
+        /*
+         * =================================================
+         * AUDIO FADE
+         * =================================================
+         */
+
+        await fadeOutAudio(
+            1200
+        );
+
+
+        /*
+         * =================================================
+         * COLLAPSE
+         * =================================================
+         */
+
+        setPhase(
+            "COLLAPSING"
+        );
+
+
+        console.log(
+            "[Observation] COLLAPSE START"
+        );
+
+
+        await collapseParticles(
+            particleSystem,
+            2600
+        );
+
+
+        /*
+         * =================================================
+         * SINGULARITY
+         * =================================================
+         */
+
+        setPhase(
+            "SINGULARITY"
+        );
+
+
+        console.log(
+            "[Observation] SINGULARITY"
+        );
+
+
+        await singularity(
+            particleSystem,
+            camera,
+            1400
+        );
+
+
+        /*
+         * =================================================
+         * BURST
+         * =================================================
+         */
+
+        setPhase(
+            "EXPLOSION"
+        );
+
+
+        console.log(
+            "[Observation] ENERGY BURST"
+        );
+
+
+        await energyBurst(
+            particleSystem,
+            camera,
+            1800
+        );
+
+
+        /*
+         * =================================================
+         * RESET
+         * =================================================
+         */
+
+        particleSystem.resetPositions?.();
+
+
+        console.log(
+            "[Observation] EVENT COMPLETE"
+        );
+
+
+        setPhase(
+            "EXPLORATION"
+        );
+
+    } catch (error) {
+
+        console.error(
+            "[Observation] EVENT ERROR:",
+            error
+        );
+
+
+        /*
+         * Always attempt to
+         * recover the particle system.
+         */
+
+        try {
+
+            particleSystem
+                .resetPositions?.();
+
+        } catch (_) {}
+
+
+        setPhase(
+            "EXPLORATION"
+        );
+
+
+        throw error;
+
+    } finally {
+
+        /*
+         * =================================================
+         * UNLOCK
+         * =================================================
+         */
+
+        unlockControls();
+
+
+        STATE.observationEvent =
+            false;
+    }
+}
+
+
+/*
+ * =========================================================
+ * CONTROL LOCK
+ * =========================================================
+ */
+
+function lockControls() {
+
+    STATE.controlsLocked =
+        true;
+
+
     console.log(
-        "[ObservationEvent] INPUT LOCKED"
+        "[Observation] CONTROLS LOCKED"
     );
 
 
     /*
-     * =====================================================
-     * MUSIC FADE
-     * =====================================================
+     * Generic event flag.
+     *
+     * Existing controls can inspect
+     * STATE.controlsLocked without
+     * requiring direct coupling.
      */
+
+    document.documentElement
+        .classList
+        .add(
+            "observation-locked"
+        );
+}
+
+
+/*
+ * =========================================================
+ * CONTROL UNLOCK
+ * =========================================================
+ */
+
+function unlockControls() {
+
+    STATE.controlsLocked =
+        false;
+
+
+    document.documentElement
+        .classList
+        .remove(
+            "observation-locked"
+        );
+
+
+    console.log(
+        "[Observation] CONTROLS UNLOCKED"
+    );
+}
+
+
+/*
+ * =========================================================
+ * AUDIO FADE
+ * =========================================================
+ */
+
+async function fadeOutAudio(
+    duration = 1000
+) {
+
+    const audio =
+        getMainAudio();
+
+
+    if (
+        !audio
+    ) {
+
+        console.warn(
+            "[Observation] AUDIO NOT FOUND"
+        );
+
+        await wait(
+            duration
+        );
+
+        return;
+    }
+
+
+    const startVolume =
+        Number.isFinite(
+            audio.volume
+        )
+            ? audio.volume
+            : 1;
+
+
+    const start =
+        performance.now();
+
+
+    await animate(
+        duration,
+        progress => {
+
+            const p =
+                easeInOut(
+                    progress
+                );
+
+
+            audio.volume =
+                Math.max(
+                    0,
+                    startVolume *
+                    (1 - p)
+                );
+        }
+    );
+
 
     try {
 
+        audio.pause();
+
+    } catch (_) {}
+
+
+    audio.volume =
+        0;
+}
+
+
+/*
+ * =========================================================
+ * FIND MAIN AUDIO
+ * =========================================================
+ */
+
+function getMainAudio() {
+
+    /*
+     * First try common IDs.
+     */
+
+    const ids = [
+
+        "backgroundMusic",
+
+        "bgMusic",
+
+        "audio",
+
+        "music",
+
+        "mainAudio"
+
+    ];
+
+
+    for (
+        const id of ids
+    ) {
+
+        const element =
+            document.getElementById(
+                id
+            );
+
+
         if (
-            getConfig(
-                "FADE_OUT",
-                DEFAULTS.FADE_OUT
-            )
+            element instanceof
+            HTMLMediaElement
         ) {
 
-            fadeMusicOut();
-
-            console.log(
-                "[ObservationEvent] MUSIC FADING OUT"
-            );
+            return element;
         }
+    }
+
+
+    /*
+     * Fallback:
+     * first audio element.
+     */
+
+    const audio =
+        document.querySelector(
+            "audio"
+        );
+
+
+    if (
+        audio
+    ) {
+
+        return audio;
+    }
+
+
+    return null;
+}
+
+
+/*
+ * =========================================================
+ * PARTICLE COLLAPSE
+ * =========================================================
+ */
+
+async function collapseParticles(
+    particleSystem,
+    duration
+) {
+
+    if (
+        !particleSystem
+    ) {
+
+        return;
+    }
+
+
+    const start =
+        performance.now();
+
+
+    await animate(
+        duration,
+        progress => {
+
+            const p =
+                easeInCubic(
+                    progress
+                );
+
+
+            particleSystem
+                .applyCollapse?.(
+                    p
+                );
+        }
+    );
+
+
+    /*
+     * Guarantee final state.
+     */
+
+    particleSystem
+        .applyCollapse?.(
+            1
+        );
+
+
+    console.log(
+        "[Observation] COLLAPSE COMPLETE"
+    );
+}
+
+
+/*
+ * =========================================================
+ * SINGULARITY
+ * =========================================================
+ */
+
+async function singularity(
+    particleSystem,
+    camera,
+    duration
+) {
+
+    const startZ =
+        Number.isFinite(
+            camera.position?.z
+        )
+            ? camera.position.z
+            : 100;
+
+
+    const startX =
+        Number.isFinite(
+            camera.position?.x
+        )
+            ? camera.position.x
+            : 0;
+
+
+    const startY =
+        Number.isFinite(
+            camera.position?.y
+        )
+            ? camera.position.y
+            : 0;
+
+
+    /*
+     * Singularity is represented
+     * by the particle system itself.
+     */
+
+    await animate(
+        duration,
+        progress => {
+
+            const p =
+                easeInOut(
+                    progress
+                );
+
+
+            /*
+             * Keep particles compressed.
+             */
+
+            particleSystem
+                .applyCollapse?.(
+                    1
+                );
+
+
+            /*
+             * Camera slowly approaches
+             * the center.
+             */
+
+            if (
+                camera.position
+            ) {
+
+                camera.position.z =
+                    lerp(
+                        startZ,
+                        Math.max(
+                            2,
+                            startZ * 0.45
+                        ),
+                        p
+                    );
+
+
+                camera.position.x =
+                    lerp(
+                        startX,
+                        startX * 0.45,
+                        p
+                    );
+
+
+                camera.position.y =
+                    lerp(
+                        startY,
+                        startY * 0.45,
+                        p
+                    );
+            }
+        }
+    );
+
+
+    /*
+     * Hold singularity briefly.
+     */
+
+    await wait(
+        250
+    );
+}
+
+
+/*
+ * =========================================================
+ * ENERGY BURST
+ * =========================================================
+ */
+
+async function energyBurst(
+    particleSystem,
+    camera,
+    duration
+) {
+
+    const startZ =
+        Number.isFinite(
+            camera.position?.z
+        )
+            ? camera.position.z
+            : 50;
+
+
+    const startX =
+        Number.isFinite(
+            camera.position?.x
+        )
+            ? camera.position.x
+            : 0;
+
+
+    const startY =
+        Number.isFinite(
+            camera.position?.y
+        )
+            ? camera.position.y
+            : 0;
+
+
+    /*
+     * Camera shock.
+     */
+
+    await animate(
+        duration,
+        progress => {
+
+            const p =
+                easeOutCubic(
+                    progress
+                );
+
+
+            /*
+             * Explosion.
+             */
+
+            particleSystem
+                .explode?.(
+                    p
+                );
+
+
+            /*
+             * Force camera outward.
+             */
+
+            if (
+                camera.position
+            ) {
+
+                const pullBack =
+                    lerp(
+                        0,
+                        startZ * 1.8,
+                        p
+                    );
+
+
+                camera.position.z =
+                    startZ +
+                    pullBack;
+
+
+                /*
+                 * Small shock wave.
+                 */
+
+                const shock =
+                    Math.sin(
+                        progress *
+                        Math.PI *
+                        8
+                    ) *
+                    (1 - progress) *
+                    1.5;
+
+
+                camera.position.x =
+                    startX +
+                    shock;
+
+
+                camera.position.y =
+                    startY +
+                    shock * 0.5;
+            }
+        }
+    );
+
+
+    /*
+     * Guarantee final explosion state.
+     */
+
+    particleSystem
+        .explode?.(
+            1
+        );
+
+
+    /*
+     * Restore music.
+     */
+
+    await fadeInAudio(
+        1200
+    );
+
+
+    console.log(
+        "[Observation] EXPLOSION COMPLETE"
+    );
+}
+
+
+/*
+ * =========================================================
+ * AUDIO FADE IN
+ * =========================================================
+ */
+
+async function fadeInAudio(
+    duration = 1000
+) {
+
+    const audio =
+        getMainAudio();
+
+
+    if (
+        !audio
+    ) {
+
+        return;
+    }
+
+
+    try {
+
+        audio.volume =
+            0;
+
+
+        await audio.play();
 
     } catch (error) {
 
         console.warn(
-            "[ObservationEvent] AUDIO FADE ERROR:",
+            "[Observation] AUDIO PLAY FAILED:",
             error
         );
-    }
-
-
-    /*
-     * =====================================================
-     * START COLLAPSE
-     * =====================================================
-     */
-
-    try {
-
-        await collapseNebula(
-            camera,
-            particleSystem
-        );
-
-    } catch (error) {
-
-        console.error(
-            "[ObservationEvent] COLLAPSE ERROR:",
-            error
-        );
-
-        finishSafely();
 
         return;
     }
 
 
-    /*
-     * =====================================================
-     * SINGULARITY HOLD
-     * =====================================================
-     */
+    await animate(
+        duration,
+        progress => {
 
-    try {
-
-        await wait(
-            getConfig(
-                "SINGULARITY_HOLD",
-                DEFAULTS.SINGULARITY_HOLD
-            )
-        );
-
-    } catch (_) {}
+            audio.volume =
+                easeInOut(
+                    progress
+                );
+        }
+    );
 
 
-    /*
-     * =====================================================
-     * EXPLOSION
-     * =====================================================
-     */
-
-    try {
-
-        await explodeNebula(
-            camera,
-            particleSystem
-        );
-
-    } catch (error) {
-
-        console.error(
-            "[ObservationEvent] EXPLOSION ERROR:",
-            error
-        );
-
-        finishSafely();
-
-        return;
-    }
-
-
-    /*
-     * =====================================================
-     * NEW CYCLE
-     * =====================================================
-     */
-
-    finishObservation();
-
+    audio.volume =
+        1;
 }
 
 
 /*
  * =========================================================
- * COLLAPSE
+ * GENERIC ANIMATION
  * =========================================================
  */
 
-function collapseNebula(
-    camera,
-    particleSystem
+function animate(
+    duration,
+    callback
 ) {
 
     return new Promise(
         resolve => {
 
-            console.log(
-                "[ObservationEvent] COLLAPSE START"
-            );
-
-
-            setPhase(
-                "COLLAPSE"
-            );
-
-
             const start =
                 performance.now();
 
-
-            const duration =
-                getConfig(
-                    "COLLAPSE_DURATION",
-                    DEFAULTS.COLLAPSE_DURATION
-                );
-
-
-            /*
-             * Keep original camera position.
-             *
-             * This lets us create a controlled
-             * inward movement rather than directly
-             * teleporting the camera.
-             */
-
-            const originalCamera =
-                camera.position.clone();
-
-
-            /*
-             * Determine singularity center.
-             */
-
-            const center =
-                getParticleCenter(
-                    particleSystem
-                );
-
-
-            /*
-             * Store for debugging / later systems.
-             */
-
-            particleSystem.data
-                .singularityCenter =
-                center.clone();
-
-
-            /*
-             * =================================================
-             * FRAME
-             * =================================================
-             */
 
             function frame(
                 now
             ) {
 
-                const raw =
+                const elapsed =
+                    now -
+                    start;
+
+
+                const progress =
                     Math.min(
                         1,
-                        Math.max(
-                            0,
-                            (
-                                now -
-                                start
-                            ) /
-                            duration
-                        )
+                        elapsed /
+                        duration
                     );
 
-
-                /*
-                 * Smoothstep.
-                 */
-
-                const eased =
-                    smoothstep(
-                        raw
-                    );
-
-
-                /*
-                 * =================================================
-                 * PARTICLE COLLAPSE
-                 * =================================================
-                 */
 
                 try {
 
-                    particleSystem
-                        .applyCollapse(
-                            eased
-                        );
-
-                } catch (error) {
-
-                    console.warn(
-                        "[ObservationEvent] PARTICLE COLLAPSE ERROR:",
-                        error
-                    );
-                }
-
-
-                /*
-                 * =================================================
-                 * CAMERA GRAVITY
-                 *
-                 * Camera slowly moves toward
-                 * the singularity.
-                 * =================================================
-                 */
-
-                try {
-
-                    const pull =
-                        getConfig(
-                            "CAMERA_PULL",
-                            DEFAULTS.CAMERA_PULL
-                        );
-
-
-                    /*
-                     * Don't instantly teleport.
-                     *
-                     * The pull becomes stronger
-                     * as collapse approaches 100%.
-                     */
-
-                    const strength =
-                        pull *
-                        (
-                            0.15 +
-                            eased * 0.85
-                        );
-
-
-                    camera.position.lerp(
-                        center,
-                        strength
+                    callback(
+                        progress
                     );
 
                 } catch (error) {
 
-                    console.warn(
-                        "[ObservationEvent] CAMERA COLLAPSE ERROR:",
+                    console.error(
+                        "[Observation] ANIMATION CALLBACK ERROR:",
                         error
                     );
                 }
 
-
-                /*
-                 * =================================================
-                 * SINGULARITY VISUAL STATE
-                 * =================================================
-                 */
-
-                updateSingularityVisual(
-                    particleSystem,
-                    eased
-                );
-
-
-                /*
-                 * =================================================
-                 * NEXT FRAME
-                 * =================================================
-                 */
 
                 if (
-                    raw < 1
+                    progress >= 1
                 ) {
 
-                    requestAnimationFrame(
-                        frame
-                    );
+                    resolve();
 
                     return;
                 }
 
 
-                /*
-                 * Make sure final position
-                 * is completely collapsed.
-                 */
-
-                try {
-
-                    particleSystem
-                        .applyCollapse(
-                            1
-                        );
-
-                } catch (_) {}
-
-
-                console.log(
-                    "[ObservationEvent] SINGULARITY FORMED"
+                requestAnimationFrame(
+                    frame
                 );
-
-
-                resolve();
             }
 
 
@@ -497,533 +873,6 @@ function collapseNebula(
                 frame
             );
         }
-    );
-}
-
-
-/*
- * =========================================================
- * EXPLOSION
- * =========================================================
- */
-
-function explodeNebula(
-    camera,
-    particleSystem
-) {
-
-    return new Promise(
-        resolve => {
-
-            console.log(
-                "[ObservationEvent] EXPLOSION START"
-            );
-
-
-            setPhase(
-                "EXPLOSION"
-            );
-
-
-            /*
-             * Restore music exactly when
-             * the singularity releases its energy.
-             */
-
-            try {
-
-                if (
-                    getConfig(
-                        "RESTORE_MUSIC",
-                        DEFAULTS.RESTORE_MUSIC
-                    )
-                ) {
-
-                    restoreMusic();
-
-                    console.log(
-                        "[ObservationEvent] MUSIC RESTORED"
-                    );
-                }
-
-            } catch (error) {
-
-                console.warn(
-                    "[ObservationEvent] AUDIO RESTORE ERROR:",
-                    error
-                );
-            }
-
-
-            const start =
-                performance.now();
-
-
-            const duration =
-                getConfig(
-                    "EXPLOSION_DURATION",
-                    DEFAULTS.EXPLOSION_DURATION
-                );
-
-
-            /*
-             * =================================================
-             * ORIGINAL CAMERA POSITION
-             * =================================================
-             */
-
-            const originalCameraZ =
-                camera.position.z;
-
-
-            /*
-             * Explosion direction.
-             *
-             * Camera receives a temporary shock.
-             */
-
-            const shockDirection =
-                new THREEVector3(
-                    randomRange(
-                        -1,
-                        1
-                    ),
-                    randomRange(
-                        -1,
-                        1
-                    ),
-                    randomRange(
-                        -1,
-                        1
-                    )
-                );
-
-
-            normalizeVector(
-                shockDirection
-            );
-
-
-            /*
-             * =================================================
-             * FRAME
-             * =================================================
-             */
-
-            function frame(
-                now
-            ) {
-
-                const raw =
-                    Math.min(
-                        1,
-                        Math.max(
-                            0,
-                            (
-                                now -
-                                start
-                            ) /
-                            duration
-                        )
-                    );
-
-
-                /*
-                 * Explosion starts violently,
-                 * then slows down.
-                 */
-
-                const explosionPower =
-                    1 -
-                    easeOutCubic(
-                        raw
-                    );
-
-
-                /*
-                 * =================================================
-                 * PARTICLES
-                 * =================================================
-                 */
-
-                try {
-
-                    particleSystem
-                        .explode(
-                            explosionPower
-                        );
-
-                } catch (error) {
-
-                    console.warn(
-                        "[ObservationEvent] PARTICLE EXPLOSION ERROR:",
-                        error
-                    );
-                }
-
-
-                /*
-                 * =================================================
-                 * CAMERA SHOCK
-                 * =================================================
-                 */
-
-                try {
-
-                    const shock =
-                        getConfig(
-                            "CAMERA_EXPLOSION",
-                            DEFAULTS.CAMERA_EXPLOSION
-                        );
-
-
-                    /*
-                     * Pull camera backward
-                     * as the universe explodes.
-                     */
-
-                    camera.position.z =
-                        originalCameraZ +
-                        (
-                            shock *
-                            easeOutCubic(
-                                raw
-                            )
-                        );
-
-
-                    /*
-                     * Small temporary shake.
-                     */
-
-                    const shake =
-                        getConfig(
-                            "CAMERA_SHAKE",
-                            DEFAULTS.CAMERA_SHAKE
-                        );
-
-
-                    const shakeStrength =
-                        Math.sin(
-                            raw *
-                            Math.PI *
-                            8
-                        ) *
-                        (
-                            1 -
-                            raw
-                        ) *
-                        shake;
-
-
-                    camera.position.x +=
-                        shockDirection.x *
-                        shakeStrength;
-
-
-                    camera.position.y +=
-                        shockDirection.y *
-                        shakeStrength;
-
-
-                } catch (error) {
-
-                    console.warn(
-                        "[ObservationEvent] CAMERA EXPLOSION ERROR:",
-                        error
-                    );
-                }
-
-
-                /*
-                 * =================================================
-                 * NEXT FRAME
-                 * =================================================
-                 */
-
-                if (
-                    raw < 1
-                ) {
-
-                    requestAnimationFrame(
-                        frame
-                    );
-
-                    return;
-                }
-
-
-                console.log(
-                    "[ObservationEvent] EXPLOSION COMPLETE"
-                );
-
-
-                resolve();
-            }
-
-
-            requestAnimationFrame(
-                frame
-            );
-        }
-    );
-}
-
-
-/*
- * =========================================================
- * SINGULARITY VISUAL
- * =========================================================
- *
- * The actual shader remains responsible for rendering.
- * Here we expose a normalized state so the particle
- * system can optionally use it later.
- * =========================================================
- */
-
-function updateSingularityVisual(
-    particleSystem,
-    progress
-) {
-
-    if (
-        !particleSystem ||
-        !particleSystem.data
-    ) {
-
-        return;
-    }
-
-
-    particleSystem.data
-        .collapseProgress =
-        progress;
-
-
-    /*
-     * Optional material hooks.
-     *
-     * Current ParticleSystem does not require
-     * these uniforms, therefore this is completely
-     * backward compatible.
-     */
-
-    try {
-
-        const uniforms =
-            particleSystem
-                .material
-                ?.uniforms;
-
-
-        if (!uniforms) {
-
-            return;
-        }
-
-
-        if (
-            uniforms.uCollapse
-        ) {
-
-            uniforms.uCollapse.value =
-                progress;
-        }
-
-
-        if (
-            uniforms.uBrightness
-        ) {
-
-            uniforms.uBrightness.value =
-                1 +
-                progress * 2;
-        }
-
-    } catch (_) {}
-}
-
-
-/*
- * =========================================================
- * FINISH
- * =========================================================
- */
-
-function finishObservation() {
-
-    console.log(
-        "[ObservationEvent] EVENT COMPLETE"
-    );
-
-
-    /*
-     * Unlock.
-     */
-
-    STATE.observationLocked =
-        false;
-
-
-    STATE.observationComplete =
-        false;
-
-
-    document.body.classList.remove(
-        "observation-lock"
-    );
-
-
-    setPhase(
-        "NEW_CYCLE"
-    );
-
-
-    /*
-     * =====================================================
-     * NEW NEBULA
-     * =====================================================
-     *
-     * Universe already owns the cycle.
-     *
-     * Keep this bridge compatible with
-     * your current universe.js.
-     */
-
-    try {
-
-        if (
-            typeof window !==
-            "undefined" &&
-            typeof window
-                .__generateNextNebula ===
-            "function"
-        ) {
-
-            console.log(
-                "[ObservationEvent] REQUEST NEW CYCLE"
-            );
-
-
-            window
-                .__generateNextNebula();
-
-        } else {
-
-            console.warn(
-                "[ObservationEvent] NEXT CYCLE HOOK NOT FOUND"
-            );
-        }
-
-    } catch (error) {
-
-        console.error(
-            "[ObservationEvent] NEXT CYCLE ERROR:",
-            error
-        );
-    }
-}
-
-
-/*
- * =========================================================
- * SAFE FAILURE
- * =========================================================
- */
-
-function finishSafely() {
-
-    console.warn(
-        "[ObservationEvent] SAFE RECOVERY"
-    );
-
-
-    STATE.observationLocked =
-        false;
-
-
-    STATE.observationComplete =
-        false;
-
-
-    document.body.classList.remove(
-        "observation-lock"
-    );
-
-
-    setPhase(
-        "EXPLORATION"
-    );
-}
-
-
-/*
- * =========================================================
- * PARTICLE CENTER
- * =========================================================
- */
-
-function getParticleCenter(
-    particleSystem
-) {
-
-    if (
-        particleSystem?.data
-            ?.center
-    ) {
-
-        return particleSystem
-            .data
-            .center
-            .clone();
-    }
-
-
-    return new THREEVector3(
-        0,
-        0,
-        0
-    );
-}
-
-
-/*
- * =========================================================
- * SMOOTHSTEP
- * =========================================================
- */
-
-function smoothstep(
-    x
-) {
-
-    return (
-        x *
-        x *
-        (
-            3 -
-            2 * x
-        )
-    );
-}
-
-
-/*
- * =========================================================
- * EASE OUT CUBIC
- * =========================================================
- */
-
-function easeOutCubic(
-    x
-) {
-
-    return (
-        1 -
-        Math.pow(
-            1 - x,
-            3
-        )
     );
 }
 
@@ -1052,173 +901,64 @@ function wait(
 
 /*
  * =========================================================
- * CONFIG
+ * LERP
  * =========================================================
  */
 
-function getConfig(
-    key,
-    fallback
-) {
-
-    try {
-
-        const observation =
-            CONFIG?.OBSERVATION;
-
-
-        if (
-            observation &&
-            Number.isFinite(
-                observation[key]
-            )
-        ) {
-
-            return observation[key];
-        }
-
-
-        return fallback;
-
-    } catch (_) {
-
-        return fallback;
-    }
-}
-
-
-/*
- * =========================================================
- * RANDOM
- * =========================================================
- */
-
-function randomRange(
-    min,
-    max
+function lerp(
+    a,
+    b,
+    t
 ) {
 
     return (
-        min +
-        Math.random() *
+        a +
         (
-            max -
-            min
-        )
+            b -
+            a
+        ) *
+        t
     );
 }
 
 
 /*
  * =========================================================
- * VECTOR HELPERS
- *
- * Kept local so this module does not
- * need another Three.js dependency.
+ * EASING
  * =========================================================
  */
 
-function THREEVector3(
-    x = 0,
-    y = 0,
-    z = 0
+function easeInCubic(
+    t
 ) {
 
-    return {
-
-        x,
-        y,
-        z,
-
-        clone() {
-
-            return THREEVector3(
-                this.x,
-                this.y,
-                this.z
-            );
-        },
-
-        lerp(
-            target,
-            alpha
-        ) {
-
-            this.x +=
-                (
-                    target.x -
-                    this.x
-                ) *
-                alpha;
-
-
-            this.y +=
-                (
-                    target.y -
-                    this.y
-                ) *
-                alpha;
-
-
-            this.z +=
-                (
-                    target.z -
-                    this.z
-                ) *
-                alpha;
-
-
-            return this;
-        }
-    };
+    return t * t * t;
 }
 
 
-/*
- * =========================================================
- * VECTOR NORMALIZE
- * =========================================================
- */
-
-function normalizeVector(
-    vector
+function easeOutCubic(
+    t
 ) {
 
-    const length =
-        Math.sqrt(
-            vector.x * vector.x +
-            vector.y * vector.y +
-            vector.z * vector.z
+    return 1 -
+        Math.pow(
+            1 - t,
+            3
         );
+}
 
 
-    if (
-        length <=
-        0.000001
-    ) {
+function easeInOut(
+    t
+) {
 
-        vector.x =
-            0;
+    return t < 0.5
 
-        vector.y =
-            0;
+        ? 2 * t * t
 
-        vector.z =
-            1;
-
-        return vector;
-    }
-
-
-    vector.x /=
-        length;
-
-    vector.y /=
-        length;
-
-    vector.z /=
-        length;
-
-
-    return vector;
+        : 1 -
+          Math.pow(
+              -2 * t + 2,
+              2
+          ) / 2;
 }
