@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="
+            width=device-width,
+            initial-scale=1,
+            maximum-scale=1,
+            user-scalable=no,
+            viewport-fit=cover
+        "
+    >
+
+    <title>
+        Particle Universe Observation Engine
+    </title>
+
+
+    <!-- =====================================================
+         CSS
+         ===================================================== -->
+
+    <!-- Base -->
+    <link
+        rel="stylesheet"
+        href="./css/base.css"
+    >
+
+    <!-- Entry -->
+    <link
+        rel="stylesheet"
+        href="./css/entry.css"
+    >
+
+    <!-- Universe -->
+    <link
+        rel="stylesheet"
+        href="./css/universe.css"
+    >
+
+    <!-- Controls -->
+    <link
+        rel="stylesheet"
+        href="./css/controls.css"
+    >
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         PARTICLE UNIVERSE CANVAS
+         ===================================================== -->
+
+    <canvas
+        id="universeCanvas"
+    ></canvas>
+
+
+    <!-- =====================================================
+         STANDALONE ENTRY
+         
+         Controlled ONLY by:
+         ./js/entry/entry-standalone.js
+         
+         It does NOT import:
+         - Three.js
+         - Universe
+         - Engine
+         ===================================================== -->
+
+    <div
+        id="entryLayer"
+    >
+
+        <button
+            id="enterButton"
+            type="button"
+        >
+            Click to Enter
+        </button>
+
+    </div>
+
+
+    <!-- =====================================================
+         CUSTOM IMAGE ADDER
+         ===================================================== -->
+
+    <label
+        id="imageAdder"
+        for="imageInput"
+        aria-label="Add image"
+    >
+        +
+    </label>
+
+    <input
+        id="imageInput"
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+    >
+
+
+    <!-- =====================================================
+         FALLBACK MESSAGE
+         ===================================================== -->
+
+    <div
+        id="fallbackMessage"
+    ></div>
+
+
+    <!-- =====================================================
+         ENTRY SCRIPT
+         
+         IMPORTANT:
+         This is intentionally NOT a module.
+
+         It loads first and independently.
+
+         Flow:
+
+         Click
+           ↓
+         Fullscreen
+           ↓
+         Hide Entry
+           ↓
+         dispatch:
+         particle-universe-enter
+         ===================================================== -->
+
+    <script
+        src="./js/entry/entry-standalone.js"
+    ></script>
+
+
+    <!-- =====================================================
+         MAIN UNIVERSE ENGINE
+         
+         main.js listens for:
+
+         particle-universe-enter
+
+         Then:
+
+         Audio
+           ↓
+         Renderer
+           ↓
+         Scene
+           ↓
+         Camera
+           ↓
+         Universe
+           ↓
+         Observer
+           ↓
+         Engine
+         ===================================================== -->
+
+    <script
+        type="module"
+        src="./js/main.js"
+    ></script>
+
+
+</body>
+
+</html>
