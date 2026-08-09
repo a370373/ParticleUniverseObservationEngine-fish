@@ -3,9 +3,7 @@
  * PARTICLE UNIVERSE
  * OBSERVATION SIMILARITY
  *
- * Single Observation Score Core
- *
- * 負責：
+ * Unified Observation Score Core
  *
  * Camera
  *   ↓
@@ -13,14 +11,15 @@
  * Distance
  * Position
  * Scale
+ * Optional Image Similarity
  *   ↓
- * Unified Similarity Score
+ * Unified Observation Score
  *
  * IMPORTANT
  * ---------------------------------------------------------
- * 這個模組只負責「計算」。
+ * This module ONLY calculates observation similarity.
  *
- * 不負責：
+ * It does NOT control:
  *
  * - Hold Timer
  * - Observation Complete
@@ -29,9 +28,11 @@
  * - Particle Collapse
  * - Explosion
  * - STATE
+ * - Controls
  *
- * 所有 Observation 判定模組
- * 都應該使用這裡的結果。
+ * Observer / Universe logic should consume the
+ * result returned by calculateObservationScore().
+ *
  * =========================================================
  */
 
@@ -44,23 +45,59 @@
 
 const DEFAULTS = {
 
+    /*
+     * Maximum tolerated angular error.
+     *
+     * radians
+     */
+
     ANGLE_TOLERANCE:
         0.12,
+
+
+    /*
+     * Maximum relative distance error.
+     *
+     * 0.10 = 10%
+     */
 
     DISTANCE_TOLERANCE:
         0.10,
 
+
+    /*
+     * Maximum normalized position error.
+     */
+
     POSITION_TOLERANCE:
         0.08,
+
+
+    /*
+     * Maximum relative scale error.
+     */
 
     SCALE_TOLERANCE:
         0.08,
 
 
     /*
-     * Rotation is dominant because
-     * the hidden image is primarily
-     * revealed by camera orientation.
+     * Image similarity is optional.
+     *
+     * It is NOT automatically enabled unless
+     * a valid image similarity value is supplied.
+     */
+
+    IMAGE_SIMILARITY_WEIGHT:
+        0.25,
+
+
+    /*
+     * Geometry weights.
+     *
+     * When image similarity is unavailable,
+     * these four geometry weights are normalized
+     * automatically.
      */
 
     ROTATION_WEIGHT:
@@ -76,8 +113,27 @@ const DEFAULTS = {
         0.15,
 
 
+    /*
+     * Final observation threshold.
+     */
+
     SCORE_THRESHOLD:
-        0.86
+        0.86,
+
+
+    /*
+     * Minimum individual geometry scores.
+     *
+     * Prevents a high total score from hiding
+     * a completely incorrect camera orientation
+     * or distance.
+     */
+
+    MIN_ROTATION_SCORE:
+        0.70,
+
+    MIN_DISTANCE_SCORE:
+        0.70
 };
 
 
@@ -112,7 +168,8 @@ export function calculateObservationScore(
 
 
     if (
-        !target
+        !target ||
+        typeof target !== "object"
     ) {
 
         return createEmptyResult();
@@ -167,7 +224,8 @@ export function calculateObservationScore(
     const position =
         calculatePositionScore(
             cameraState.position,
-            target
+            target,
+            nebula
         );
 
 
@@ -186,40 +244,77 @@ export function calculateObservationScore(
 
     /*
      * -----------------------------------------------------
-     * FINAL SCORE
+     * OPTIONAL IMAGE SIMILARITY
      * -----------------------------------------------------
+     *
+     * This module does not calculate image similarity.
+     *
+     * It only accepts an already calculated value if
+     * another module provides one.
+     *
+     * Supported locations:
+     *
+     * nebula.observation.imageSimilarity
+     * nebula.imageSimilarity
+     *
      */
 
-    const score =
-
-        rotation.score *
-        DEFAULTS.ROTATION_WEIGHT
-
-        +
-
-        distance.score *
-        DEFAULTS.DISTANCE_WEIGHT
-
-        +
-
-        position.score *
-        DEFAULTS.POSITION_WEIGHT
-
-        +
-
-        scale.score *
-        DEFAULTS.SCALE_WEIGHT;
+    const image =
+        getImageSimilarity(
+            nebula,
+            target
+        );
 
 
     /*
      * -----------------------------------------------------
-     * VALID
+     * FINAL SCORE
+     * -----------------------------------------------------
+     */
+
+    const geometryScore =
+        calculateGeometryScore(
+            rotation.score,
+            distance.score,
+            position.score,
+            scale.score
+        );
+
+
+    const score =
+        image.available
+
+            ? (
+
+                geometryScore *
+                (
+                    1 -
+                    DEFAULTS.IMAGE_SIMILARITY_WEIGHT
+                )
+
+                +
+
+                image.score *
+                DEFAULTS.IMAGE_SIMILARITY_WEIGHT
+
+            )
+
+            : geometryScore;
+
+
+    /*
+     * -----------------------------------------------------
+     * VALIDATION
      * -----------------------------------------------------
      *
-     * Overall score alone is not enough.
+     * A valid observation requires:
      *
-     * Rotation and distance must both
-     * be reasonably correct.
+     * 1. Final score >= threshold
+     * 2. Rotation reasonably correct
+     * 3. Distance reasonably correct
+     *
+     * If image similarity exists,
+     * it must also satisfy the final threshold.
      *
      */
 
@@ -231,19 +326,45 @@ export function calculateObservationScore(
         &&
 
         rotation.score >=
-        0.70
+        DEFAULTS.MIN_ROTATION_SCORE
 
         &&
 
         distance.score >=
-        0.70;
+        DEFAULTS.MIN_DISTANCE_SCORE
 
+        &&
+
+        (
+            !image.available
+
+            ||
+
+            image.score >=
+            getThreshold()
+        );
+
+
+    /*
+     * -----------------------------------------------------
+     * RESULT
+     * -----------------------------------------------------
+     */
 
     return {
 
         valid,
 
         score,
+
+        geometryScore,
+
+        imageSimilarityScore:
+            image.score,
+
+        imageSimilarityAvailable:
+            image.available,
+
 
         rotationScore:
             rotation.score,
@@ -257,6 +378,7 @@ export function calculateObservationScore(
         scaleScore:
             scale.score,
 
+
         yawError:
             rotation.yawError,
 
@@ -266,6 +388,7 @@ export function calculateObservationScore(
         rollError:
             rotation.rollError,
 
+
         distanceError:
             distance.error,
 
@@ -273,8 +396,85 @@ export function calculateObservationScore(
             position.error,
 
         scaleError:
-            scale.error
+            scale.error,
+
+
+        cameraDistance:
+            distance.cameraDistance,
+
+        targetDistance:
+            distance.targetDistance,
+
+
+        actualScale:
+            scale.actualScale,
+
+        targetScale:
+            scale.targetScale
     };
+}
+
+
+/*
+ * =========================================================
+ * GEOMETRY SCORE
+ * =========================================================
+ */
+
+function calculateGeometryScore(
+    rotationScore,
+    distanceScore,
+    positionScore,
+    scaleScore
+) {
+
+    const weightTotal =
+
+        DEFAULTS.ROTATION_WEIGHT
+
+        +
+
+        DEFAULTS.DISTANCE_WEIGHT
+
+        +
+
+        DEFAULTS.POSITION_WEIGHT
+
+        +
+
+        DEFAULTS.SCALE_WEIGHT;
+
+
+    if (
+        weightTotal <=
+        0
+    ) {
+
+        return 0;
+    }
+
+
+    return (
+
+        rotationScore *
+        DEFAULTS.ROTATION_WEIGHT
+
+        +
+
+        distanceScore *
+        DEFAULTS.DISTANCE_WEIGHT
+
+        +
+
+        positionScore *
+        DEFAULTS.POSITION_WEIGHT
+
+        +
+
+        scaleScore *
+        DEFAULTS.SCALE_WEIGHT
+
+    ) / weightTotal;
 }
 
 
@@ -291,21 +491,21 @@ function calculateRotationScore(
 
     const targetYaw =
         toNumber(
-            target.yaw,
+            target?.yaw,
             0
         );
 
 
     const targetPitch =
         toNumber(
-            target.pitch,
+            target?.pitch,
             0
         );
 
 
     const targetRoll =
         toNumber(
-            target.roll,
+            target?.roll,
             0
         );
 
@@ -357,7 +557,11 @@ function calculateRotationScore(
 
 
     /*
-     * Yaw is most important.
+     * Yaw remains dominant.
+     *
+     * This is intentional because the hidden
+     * projection is primarily controlled by
+     * viewing orientation.
      */
 
     const score =
@@ -390,6 +594,16 @@ function calculateRotationScore(
  * =========================================================
  * DISTANCE SCORE
  * =========================================================
+ *
+ * The target distance represents the radial
+ * distance from the nebula center.
+ *
+ * target.position is NOT used here.
+ *
+ * This prevents position and distance from
+ * fighting each other.
+ *
+ * =========================================================
  */
 
 function calculateDistanceScore(
@@ -398,14 +612,9 @@ function calculateDistanceScore(
     nebula
 ) {
 
-    /*
-     * Nebula center is the authoritative
-     * reference point.
-     */
-
     const center =
-        normalizeVector3(
-            nebula?.center
+        getNebulaCenter(
+            nebula
         );
 
 
@@ -421,7 +630,7 @@ function calculateDistanceScore(
             0.000001,
             Math.abs(
                 toNumber(
-                    target.distance,
+                    target?.distance,
                     110
                 )
             )
@@ -461,51 +670,220 @@ function calculateDistanceScore(
  * =========================================================
  * POSITION SCORE
  * =========================================================
+ *
+ * IMPORTANT
+ * ---------------------------------------------------------
+ * target.position represents the desired camera
+ * direction around the nebula rather than an
+ * absolute world-space camera position.
+ *
+ * This avoids the old bug where:
+ *
+ * target.distance = 110
+ *
+ * while:
+ *
+ * target.position = (-8 ... +8)
+ *
+ * were incorrectly compared as absolute positions.
+ *
+ * =========================================================
  */
 
 function calculatePositionScore(
     cameraPosition,
-    target
+    target,
+    nebula
 ) {
 
-    const targetPosition =
-        normalizeVector3(
-            target.position
+    const center =
+        getNebulaCenter(
+            nebula
         );
 
 
-    const error =
-        distance3(
-            cameraPosition,
-            targetPosition
+    const relativeX =
+        cameraPosition.x -
+        center.x;
+
+
+    const relativeY =
+        cameraPosition.y -
+        center.y;
+
+
+    const relativeZ =
+        cameraPosition.z -
+        center.z;
+
+
+    const length =
+        Math.sqrt(
+
+            relativeX *
+            relativeX
+
+            +
+
+            relativeY *
+            relativeY
+
+            +
+
+            relativeZ *
+            relativeZ
+
         );
 
 
     /*
-     * Normalize position error
-     * against observation distance.
+     * No meaningful direction.
      */
 
-    const reference =
-        Math.max(
-            1,
-            Math.abs(
-                toNumber(
-                    target.distance,
-                    100
-                )
-            )
+    if (
+        length <
+        0.000001
+    ) {
+
+        return {
+
+            score:
+                0,
+
+            error:
+                Infinity
+        };
+    }
+
+
+    /*
+     * Normalize actual camera direction.
+     */
+
+    const actualX =
+        relativeX /
+        length;
+
+
+    const actualY =
+        relativeY /
+        length;
+
+
+    const actualZ =
+        relativeZ /
+        length;
+
+
+    /*
+     * Target observation position.
+     */
+
+    const targetPosition =
+        normalizeVector3(
+            target?.position
         );
 
 
-    const normalizedError =
-        error /
-        reference;
+    const targetLength =
+        Math.sqrt(
+
+            targetPosition.x *
+            targetPosition.x
+
+            +
+
+            targetPosition.y *
+            targetPosition.y
+
+            +
+
+            targetPosition.z *
+            targetPosition.z
+
+        );
+
+
+    /*
+     * If no valid target position exists,
+     * fall back to a neutral score.
+     */
+
+    if (
+        targetLength <
+        0.000001
+    ) {
+
+        return {
+
+            score:
+                1,
+
+            error:
+                0
+        };
+    }
+
+
+    const targetX =
+        targetPosition.x /
+        targetLength;
+
+
+    const targetY =
+        targetPosition.y /
+        targetLength;
+
+
+    const targetZ =
+        targetPosition.z /
+        targetLength;
+
+
+    /*
+     * Dot product gives angular
+     * directional similarity.
+     *
+     * 1  = same direction
+     * 0  = perpendicular
+     * -1 = opposite direction
+     */
+
+    const dot =
+        clamp(
+            (
+                actualX *
+                targetX
+
+                +
+
+                actualY *
+                targetY
+
+                +
+
+                actualZ *
+                targetZ
+            ),
+            -1,
+            1
+        );
+
+
+    /*
+     * Convert angular difference
+     * into radians.
+     */
+
+    const error =
+        Math.acos(
+            dot
+        );
 
 
     const score =
         toleranceScore(
-            normalizedError,
+            error,
             DEFAULTS.POSITION_TOLERANCE
         );
 
@@ -514,8 +892,7 @@ function calculatePositionScore(
 
         score,
 
-        error:
-            normalizedError
+        error
     };
 }
 
@@ -532,46 +909,29 @@ function calculateScaleScore(
 ) {
 
     const targetScale =
-        toNumber(
-            target.scale,
-            1
+        Math.max(
+            0.000001,
+            toNumber(
+                target?.scale,
+                1
+            )
         );
 
 
     /*
-     * Try particle object scale first.
+     * -----------------------------------------------------
+     * SCALE SOURCE
+     * -----------------------------------------------------
      */
-
-    const particleObject =
-        nebula?.particleSystem?.points
-
-        ||
-
-        nebula?.points
-
-        ||
-
-        null;
-
 
     let actualScale =
         1;
 
 
-    if (
-        particleObject?.scale
-    ) {
-
-        actualScale =
-            toNumber(
-                particleObject.scale.x,
-                1
-            );
-    }
-
-
     /*
-     * Nebula scale has priority.
+     * Preferred:
+     *
+     * nebula.scale
      */
 
     if (
@@ -586,6 +946,39 @@ function calculateScaleScore(
             Number(
                 nebula.scale
             );
+    }
+
+
+    /*
+     * Fallback:
+     *
+     * particleSystem.points.scale
+     */
+
+    else {
+
+        const points =
+            nebula?.particleSystem?.points
+
+            ||
+
+            nebula?.points
+
+            ||
+
+            null;
+
+
+        if (
+            points?.scale
+        ) {
+
+            actualScale =
+                toNumber(
+                    points.scale.x,
+                    1
+                );
+        }
     }
 
 
@@ -618,6 +1011,91 @@ function calculateScaleScore(
 
 /*
  * =========================================================
+ * IMAGE SIMILARITY
+ * =========================================================
+ *
+ * This module does not perform image comparison.
+ *
+ * It only consumes an external score.
+ *
+ * Accepted:
+ *
+ * 0.0 → completely different
+ * 1.0 → identical
+ *
+ * Supported:
+ *
+ * nebula.observation.imageSimilarity
+ *
+ * OR
+ *
+ * nebula.imageSimilarity
+ *
+ * =========================================================
+ */
+
+function getImageSimilarity(
+    nebula,
+    target
+) {
+
+    const candidates = [
+
+        target?.imageSimilarity,
+
+        nebula?.imageSimilarity,
+
+        nebula?.observationSimilarity
+
+    ];
+
+
+    for (
+        const value
+        of candidates
+    ) {
+
+        const number =
+            Number(
+                value
+            );
+
+
+        if (
+            Number.isFinite(
+                number
+            )
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                score:
+                    clamp(
+                        number,
+                        0,
+                        1
+                    )
+            };
+        }
+    }
+
+
+    return {
+
+        available:
+            false,
+
+        score:
+            0
+    };
+}
+
+
+/*
+ * =========================================================
  * CAMERA NORMALIZATION
  * =========================================================
  */
@@ -627,58 +1105,70 @@ function normalizeCamera(
 ) {
 
     /*
-     * Supports:
+     * Three.js camera:
      *
-     * camera.rotation
+     * camera.rotation.x
+     * camera.rotation.y
+     * camera.rotation.z
      *
-     * camera.yaw / pitch / roll
+     * These are interpreted as:
      *
-     * camera.position
+     * pitch = X
+     * yaw   = Y
+     * roll  = Z
      */
 
-    const rotation =
+    let rotation;
+
+
+    if (
         camera.rotation
-            ? {
+    ) {
 
-                yaw:
-                    toNumber(
-                        camera.rotation.y,
-                        0
-                    ),
+        rotation = {
 
-                pitch:
-                    toNumber(
-                        camera.rotation.x,
-                        0
-                    ),
+            yaw:
+                toNumber(
+                    camera.rotation.y,
+                    0
+                ),
 
-                roll:
-                    toNumber(
-                        camera.rotation.z,
-                        0
-                    )
+            pitch:
+                toNumber(
+                    camera.rotation.x,
+                    0
+                ),
 
-            }
-            : {
+            roll:
+                toNumber(
+                    camera.rotation.z,
+                    0
+                )
+        };
 
-                yaw:
-                    toNumber(
-                        camera.yaw,
-                        0
-                    ),
+    } else {
 
-                pitch:
-                    toNumber(
-                        camera.pitch,
-                        0
-                    ),
+        rotation = {
 
-                roll:
-                    toNumber(
-                        camera.roll,
-                        0
-                    )
-            };
+            yaw:
+                toNumber(
+                    camera.yaw,
+                    0
+                ),
+
+            pitch:
+                toNumber(
+                    camera.pitch,
+                    0
+                ),
+
+            roll:
+                toNumber(
+                    camera.roll,
+                    0
+                )
+        };
+    }
 
 
     const position =
@@ -698,7 +1188,34 @@ function normalizeCamera(
 
 /*
  * =========================================================
+ * NEBULA CENTER
+ * =========================================================
+ */
+
+function getNebulaCenter(
+    nebula
+) {
+
+    return normalizeVector3(
+        nebula?.center
+    );
+}
+
+
+/*
+ * =========================================================
  * TOLERANCE SCORE
+ * =========================================================
+ *
+ * error = 0
+ *     → 1
+ *
+ * error = tolerance
+ *     → 0
+ *
+ * error > tolerance
+ *     → 0
+ *
  * =========================================================
  */
 
@@ -718,27 +1235,30 @@ function toleranceScore(
 
 
     if (
+        !Number.isFinite(
+            tolerance
+        ) ||
         tolerance <=
         0
     ) {
 
         return error <=
             0
+
                 ? 1
+
                 : 0;
     }
 
 
-    return Math.max(
+    return clamp(
+        1 -
+        (
+            error /
+            tolerance
+        ),
         0,
-        Math.min(
-            1,
-            1 -
-            (
-                error /
-                tolerance
-            )
-        )
+        1
     );
 }
 
@@ -783,11 +1303,14 @@ function angleDifference(
 ) {
 
     let difference =
+
         toNumber(
             a,
             0
         )
+
         -
+
         toNumber(
             b,
             0
@@ -897,6 +1420,28 @@ function distance3(
 
 /*
  * =========================================================
+ * CLAMP
+ * =========================================================
+ */
+
+function clamp(
+    value,
+    min,
+    max
+) {
+
+    return Math.max(
+        min,
+        Math.min(
+            max,
+            value
+        )
+    );
+}
+
+
+/*
+ * =========================================================
  * NUMBER
  * =========================================================
  */
@@ -915,7 +1460,9 @@ function toNumber(
     return Number.isFinite(
         number
     )
+
         ? number
+
         : fallback;
 }
 
@@ -948,6 +1495,16 @@ function createEmptyResult() {
         score:
             0,
 
+        geometryScore:
+            0,
+
+        imageSimilarityScore:
+            0,
+
+        imageSimilarityAvailable:
+            false,
+
+
         rotationScore:
             0,
 
@@ -960,6 +1517,7 @@ function createEmptyResult() {
         scaleScore:
             0,
 
+
         yawError:
             Infinity,
 
@@ -969,6 +1527,7 @@ function createEmptyResult() {
         rollError:
             Infinity,
 
+
         distanceError:
             Infinity,
 
@@ -976,6 +1535,20 @@ function createEmptyResult() {
             Infinity,
 
         scaleError:
-            Infinity
+            Infinity,
+
+
+        cameraDistance:
+            0,
+
+        targetDistance:
+            0,
+
+
+        actualScale:
+            1,
+
+        targetScale:
+            1
     };
 }
