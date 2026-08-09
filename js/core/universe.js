@@ -1,50 +1,24 @@
 /*
  * =========================================================
  * PARTICLE UNIVERSE
- * FULL RUNTIME
+ * UNIVERSE RUNTIME V2
  *
- * Universe
+ * CAMERA OWNERSHIP
  *
- * 負責：
+ * CameraController owns the THREE.Camera.
  *
- * 1. 建立背景宇宙
- * 2. 生成 Nebula
- * 3. 建立 ParticleSystem
- * 4. 管理 Nebula Cycle
- * 5. 建立 Observation Observer
- * 6. 接收 Observation Complete
- * 7. 執行 Observation Event
- * 8. Shuffle
- * 9. Runtime Update
+ * Universe NEVER directly controls:
  *
- * Observation:
+ *     camera.position
+ *     camera.rotation
  *
- * similarity.js
- *      ↓
- * ObservationDetector
- *      ↓
- * Observer
- *      ↓
- * Observer.update() => completed
- *      ↓
- * Universe.completeObservation()
- *      ↓
- * observation-event.js
+ * Universe communicates through:
  *
- * Universe 不負責：
+ *     cameraController.getForward()
+ *     cameraController.setPosition()
+ *     cameraController.lookAtPoint()
  *
- * - Similarity 計算
- * - HOLD Timer
- * - Target 判定
- * - Observation 判定
- *
- * =========================================================
- */
-
-
-/*
- * =========================================================
- * IMPORTS
+ * Observer receives the REAL THREE.Camera.
  * =========================================================
  */
 
@@ -52,43 +26,35 @@ import {
     generateNebula
 } from "../particles/nebula-generator.js";
 
-
 import {
     ParticleSystem
 } from "../particles/particle-system.js";
-
 
 import {
     createStars,
     createDust
 } from "../universe/stars.js";
 
-
 import {
     getRandomImage
 } from "../media/image-library.js";
-
 
 import {
     STATE,
     setPhase
 } from "./state.js";
 
-
 import {
     CONFIG
 } from "../config.js";
-
 
 import {
     runObservationEvent
 } from "../observation/observation-event.js";
 
-
 import {
     Observer
 } from "../observation/observer.js";
-
 
 import {
     shuffleParticles
@@ -126,7 +92,17 @@ export class Universe {
         this.scene =
             scene;
 
-        this.camera =
+        /*
+         * IMPORTANT:
+         *
+         * This is CameraController.
+         *
+         * The REAL THREE.Camera is:
+         *
+         * this.cameraController.camera
+         */
+
+        this.cameraController =
             cameraController;
 
 
@@ -196,58 +172,7 @@ export class Universe {
 
         try {
 
-            console.log(
-                "[Universe] CREATING STARS"
-            );
-
-
-            this.stars =
-                createStars(
-                    THREE,
-                    CONFIG.PARTICLES.STARS
-                );
-
-
-            if (
-                this.stars
-            ) {
-
-                this.scene.add(
-                    this.stars
-                );
-            }
-
-
-            console.log(
-                "[Universe] STARS CREATED"
-            );
-
-
-            console.log(
-                "[Universe] CREATING DUST"
-            );
-
-
-            this.dust =
-                createDust(
-                    THREE,
-                    CONFIG.PARTICLES.DUST
-                );
-
-
-            if (
-                this.dust
-            ) {
-
-                this.scene.add(
-                    this.dust
-                );
-            }
-
-
-            console.log(
-                "[Universe] DUST CREATED"
-            );
+            this.createBackground();
 
         } catch (error) {
 
@@ -256,11 +181,9 @@ export class Universe {
                 error
             );
 
-
             this.showError(
                 error
             );
-
 
             return;
         }
@@ -270,53 +193,9 @@ export class Universe {
          * =================================================
          * OBSERVER
          * =================================================
-         *
-         * Observer is created once.
-         *
-         * Universe provides the current Nebula
-         * through a provider callback.
-         * =================================================
          */
 
-        try {
-
-            console.log(
-                "[Universe] CREATING OBSERVER"
-            );
-
-
-            this.observer =
-                new Observer(
-                    this.THREE,
-                    this.camera,
-                    () => {
-
-                        return this.nebula;
-
-                    }
-                );
-
-
-            console.log(
-                "[Universe] OBSERVER CREATED"
-            );
-
-        } catch (error) {
-
-            console.error(
-                "[Universe] OBSERVER ERROR:",
-                error
-            );
-
-
-            this.observer =
-                null;
-
-
-            console.warn(
-                "[Universe] OBSERVER DISABLED"
-            );
-        }
+        this.createObserver();
 
 
         /*
@@ -349,13 +228,213 @@ export class Universe {
                         error
                     );
 
-
                     this.showError(
                         error
                     );
-
                 }
             );
+    }
+
+
+    /*
+     * =====================================================
+     * BACKGROUND
+     * =====================================================
+     */
+
+    createBackground() {
+
+        console.log(
+            "[Universe] CREATING STARS"
+        );
+
+
+        this.stars =
+            createStars(
+                this.THREE,
+                CONFIG.PARTICLES.STARS
+            );
+
+
+        if (
+            this.stars
+        ) {
+
+            this.stars.visible =
+                true;
+
+            this.scene.add(
+                this.stars
+            );
+        }
+
+
+        console.log(
+            "[Universe] STARS CREATED"
+        );
+
+
+        console.log(
+            "[Universe] CREATING DUST"
+        );
+
+
+        this.dust =
+            createDust(
+                this.THREE,
+                CONFIG.PARTICLES.DUST
+            );
+
+
+        if (
+            this.dust
+        ) {
+
+            this.dust.visible =
+                true;
+
+            this.scene.add(
+                this.dust
+            );
+        }
+
+
+        console.log(
+            "[Universe] DUST CREATED"
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * OBSERVER
+     * =====================================================
+     */
+
+    createObserver() {
+
+        try {
+
+            console.log(
+                "[Universe] CREATING OBSERVER"
+            );
+
+
+            /*
+             * Observer receives the REAL THREE.Camera.
+             */
+
+            const camera =
+                this.getThreeCamera();
+
+
+            if (
+                !camera
+            ) {
+
+                console.warn(
+                    "[Universe] REAL THREE CAMERA NOT AVAILABLE"
+                );
+            }
+
+
+            this.observer =
+                new Observer(
+                    this.THREE,
+                    camera,
+                    () => {
+
+                        return this.nebula;
+
+                    }
+                );
+
+
+            console.log(
+                "[Universe] OBSERVER CREATED"
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[Universe] OBSERVER ERROR:",
+                error
+            );
+
+
+            this.observer =
+                null;
+
+
+            console.warn(
+                "[Universe] OBSERVER DISABLED"
+            );
+        }
+    }
+
+
+    /*
+     * =====================================================
+     * GET REAL THREE CAMERA
+     * =====================================================
+     */
+
+    getThreeCamera() {
+
+        if (
+            !this.cameraController
+        ) {
+
+            return null;
+        }
+
+
+        /*
+         * Preferred API.
+         */
+
+        if (
+            typeof this.cameraController.getCamera ===
+            "function"
+        ) {
+
+            const camera =
+                this.cameraController.getCamera();
+
+            if (
+                camera
+            ) {
+
+                return camera;
+            }
+        }
+
+
+        /*
+         * Direct owned camera reference.
+         */
+
+        if (
+            this.cameraController.camera
+        ) {
+
+            return this.cameraController.camera;
+        }
+
+
+        /*
+         * Compatibility fallback.
+         */
+
+        if (
+            this.cameraController.isCamera
+        ) {
+
+            return this.cameraController;
+        }
+
+
+        return null;
     }
 
 
@@ -407,12 +486,6 @@ export class Universe {
          * =================================================
          * RESET EVENT
          * =================================================
-         *
-         * IMPORTANT:
-         *
-         * A new cycle invalidates the previous observation
-         * event state.
-         * =================================================
          */
 
         this.observationEventRunning =
@@ -423,7 +496,7 @@ export class Universe {
          * =================================================
          * RESET OBSERVER
          * =================================================
-         */
+ */
 
         if (
             this.observer &&
@@ -449,7 +522,7 @@ export class Universe {
          * =================================================
          * RESET GLOBAL STATE
          * =================================================
-         */
+ */
 
         STATE.observationEvent =
             false;
@@ -483,7 +556,7 @@ export class Universe {
          * =================================================
          * PHASE
          * =================================================
-         */
+ */
 
         setPhase(
             "SUMMONING"
@@ -494,7 +567,7 @@ export class Universe {
          * =================================================
          * IMAGE
          * =================================================
-         */
+ */
 
         let source =
             null;
@@ -547,7 +620,7 @@ export class Universe {
          * =================================================
          * GENERATE NEBULA
          * =================================================
-         */
+ */
 
         let nebula;
 
@@ -592,7 +665,7 @@ export class Universe {
          * =================================================
          * OLD CYCLE PROTECTION
          * =================================================
-         */
+ */
 
         if (
             currentCycle !==
@@ -612,7 +685,7 @@ export class Universe {
          * =================================================
          * VALIDATION
          * =================================================
-         */
+ */
 
         if (
             !nebula
@@ -648,7 +721,7 @@ export class Universe {
          * =================================================
          * REMOVE OLD PARTICLES
          * =================================================
-         */
+ */
 
         this.disposeParticleSystem();
 
@@ -657,11 +730,10 @@ export class Universe {
          * =================================================
          * STORE NEBULA
          * =================================================
-         */
+ */
 
         this.nebula =
             nebula;
-
 
         STATE.activeNebula =
             nebula;
@@ -669,13 +741,12 @@ export class Universe {
 
         /*
          * =================================================
-         * INITIAL NEBULA STATE
+         * INITIAL STATE
          * =================================================
-         */
+ */
 
         this.nebula.state =
             "SUMMONING";
-
 
         this.nebula.observationScore =
             0;
@@ -688,7 +759,7 @@ export class Universe {
          * =================================================
          * CREATE PARTICLE SYSTEM
          * =================================================
-         */
+ */
 
         try {
 
@@ -728,7 +799,7 @@ export class Universe {
          * =================================================
          * PARTICLE VALIDATION
          * =================================================
-         */
+ */
 
         if (
             !this.particleSystem ||
@@ -767,9 +838,18 @@ export class Universe {
 
         /*
          * =================================================
+         * VISIBILITY SAFETY
+         * =================================================
+ */
+
+        this.prepareParticleVisibility();
+
+
+        /*
+         * =================================================
          * ADD PARTICLES
          * =================================================
-         */
+ */
 
         try {
 
@@ -812,7 +892,7 @@ export class Universe {
          * =================================================
          * CAMERA
          * =================================================
-         */
+ */
 
         this.initializeCameraDistance(
             nebula
@@ -821,9 +901,18 @@ export class Universe {
 
         /*
          * =================================================
+         * CAMERA DIAGNOSTICS
+         * =================================================
+ */
+
+        this.validateCameraVisibility();
+
+
+        /*
+         * =================================================
          * OBSERVER
          * =================================================
-         */
+ */
 
         this.attachObserver(
             nebula
@@ -845,12 +934,6 @@ export class Universe {
             setTimeout(
                 () => {
 
-                    /*
-                     * -------------------------------------
-                     * OLD CYCLE PROTECTION
-                     * -------------------------------------
-                     */
-
                     if (
                         currentCycle !==
                         this.cycleId
@@ -859,12 +942,6 @@ export class Universe {
                         return;
                     }
 
-
-                    /*
-                     * -------------------------------------
-                     * OLD NEBULA PROTECTION
-                     * -------------------------------------
-                     */
 
                     if (
                         this.nebula !==
@@ -875,12 +952,6 @@ export class Universe {
                     }
 
 
-                    /*
-                     * -------------------------------------
-                     * EVENT PROTECTION
-                     * -------------------------------------
-                     */
-
                     if (
                         this.observationEventRunning
                     ) {
@@ -888,12 +959,6 @@ export class Universe {
                         return;
                     }
 
-
-                    /*
-                     * -------------------------------------
-                     * STABLE
-                     * -------------------------------------
-                     */
 
                     nebula.state =
                         "STABLE";
@@ -930,6 +995,159 @@ export class Universe {
 
     /*
      * =====================================================
+     * PREPARE PARTICLE VISIBILITY
+     * =====================================================
+     */
+
+    prepareParticleVisibility() {
+
+        const points =
+            this.particleSystem?.points;
+
+
+        if (
+            !points
+        ) {
+
+            console.error(
+                "[Universe] VISIBILITY: NO POINTS"
+            );
+
+            return false;
+        }
+
+
+        points.visible =
+            true;
+
+
+        if (
+            points.material
+        ) {
+
+            points.material.visible =
+                true;
+
+            points.material.transparent =
+                true;
+
+            if (
+                Number(points.material.opacity) <=
+                0
+            ) {
+
+                points.material.opacity =
+                    1;
+            }
+
+            points.material.needsUpdate =
+                true;
+        }
+
+
+        if (
+            points.geometry
+        ) {
+
+            points.geometry.computeBoundingBox?.();
+
+            points.geometry.computeBoundingSphere?.();
+        }
+
+
+        /*
+         * Make sure object position is valid.
+         */
+
+        if (
+            !Number.isFinite(
+                points.position.x
+            ) ||
+            !Number.isFinite(
+                points.position.y
+            ) ||
+            !Number.isFinite(
+                points.position.z
+            )
+        ) {
+
+            console.error(
+                "[Universe] VISIBILITY: INVALID POINT POSITION"
+            );
+
+
+            points.position.set(
+                0,
+                0,
+                0
+            );
+        }
+
+
+        /*
+         * Make sure scale is valid.
+         */
+
+        if (
+            !Number.isFinite(
+                points.scale.x
+            ) ||
+            !Number.isFinite(
+                points.scale.y
+            ) ||
+            !Number.isFinite(
+                points.scale.z
+            )
+        ) {
+
+            points.scale.set(
+                1,
+                1,
+                1
+            );
+        }
+
+
+        if (
+            points.scale.lengthSq() ===
+            0
+        ) {
+
+            points.scale.set(
+                1,
+                1,
+                1
+            );
+        }
+
+
+        console.log(
+            "[Universe] VISIBILITY CHECK:",
+            {
+                visible:
+                    points.visible,
+
+                material:
+                    !!points.material,
+
+                geometry:
+                    !!points.geometry,
+
+                vertexCount:
+                    points.geometry
+                        ?.attributes
+                        ?.position
+                        ?.count ?? 0
+            }
+        );
+
+
+        return true;
+    }
+
+
+    /*
+     * =====================================================
      * INITIAL CAMERA DISTANCE
      * =====================================================
      */
@@ -938,53 +1156,42 @@ export class Universe {
         nebula
     ) {
 
-        const observation =
-            nebula?.observation;
-
-
-        const targetDistance =
-            Number(
-                observation?.distance
-            );
+        const controller =
+            this.cameraController;
 
 
         if (
-            !Number.isFinite(
-                targetDistance
-            )
+            !controller
         ) {
 
-            return;
+            console.warn(
+                "[Universe] CAMERA CONTROLLER MISSING"
+            );
+
+            return false;
         }
 
 
-        const cameraObject =
-            this.camera?.camera ||
-            this.camera;
-
-
         if (
-            !cameraObject ||
-            !cameraObject.position
+            typeof controller.setPosition !==
+                "function" ||
+            typeof controller.lookAtPoint !==
+                "function"
         ) {
 
-            return;
+            console.warn(
+                "[Universe] CAMERA CONTROLLER API INCOMPLETE"
+            );
+
+            return false;
         }
 
 
         /*
-         * Only initialize once.
-         */
-
-        if (
-            this.camera &&
-            this.camera
-                .__particleUniverseInitialised
-        ) {
-
-            return;
-        }
-
+         * =================================================
+         * FIND NEBULA CENTER
+         * =================================================
+ */
 
         const center =
             this.normalizeVector3(
@@ -993,89 +1200,298 @@ export class Universe {
 
 
         /*
-         * Preserve current camera direction.
-         */
+         * =================================================
+         * DETERMINE RADIUS
+         * =================================================
+ */
 
-        let dx =
-            cameraObject.position.x -
-            center.x;
-
-        let dy =
-            cameraObject.position.y -
-            center.y;
-
-        let dz =
-            cameraObject.position.z -
-            center.z;
-
-
-        const length =
-            Math.sqrt(
-                dx * dx +
-                dy * dy +
-                dz * dz
-            );
+        let radius =
+            this.getParticleRadius();
 
 
         if (
-            length <
-            0.000001
+            !Number.isFinite(radius) ||
+            radius <= 0
         ) {
 
-            dx = 0;
-            dy = 0;
-            dz = 1;
-
-        } else {
-
-            dx /=
-                length;
-
-            dy /=
-                length;
-
-            dz /=
-                length;
+            radius =
+                10;
         }
 
 
-        const distance =
-            Math.abs(
-                targetDistance
+        /*
+         * =================================================
+         * OPTIONAL CONFIG DISTANCE
+         * =================================================
+ */
+
+        const configuredDistance =
+            Number(
+                nebula?.observation?.distance
             );
 
 
-        cameraObject.position.set(
+        /*
+         * Never blindly trust configured distance.
+         */
 
-            center.x +
-            dx *
-            distance,
+        const safeDistance =
+            Number.isFinite(
+                configuredDistance
+            )
+                ? Math.max(
+                    Math.abs(
+                        configuredDistance
+                    ),
+                    radius * 2.5,
+                    8
+                )
+                : Math.max(
+                    radius * 2.5,
+                    8
+                );
 
-            center.y +
-            dy *
-            distance,
 
-            center.z +
-            dz *
-            distance
+        /*
+         * =================================================
+         * CURRENT FORWARD
+         * =================================================
+ */
 
-        );
+        let forward =
+            null;
 
 
         if (
-            this.camera
+            typeof controller.getForward ===
+            "function"
         ) {
 
-            this.camera
-                .__particleUniverseInitialised =
-                true;
+            try {
+
+                forward =
+                    controller.getForward();
+
+            } catch (error) {
+
+                console.warn(
+                    "[Universe] CAMERA FORWARD ERROR:",
+                    error
+                );
+            }
+        }
+
+
+        if (
+            !forward ||
+            !Number.isFinite(forward.x) ||
+            !Number.isFinite(forward.y) ||
+            !Number.isFinite(forward.z)
+        ) {
+
+            forward =
+                new this.THREE.Vector3(
+                    0,
+                    0,
+                    -1
+                );
+        }
+
+
+        forward.normalize();
+
+
+        /*
+         * =================================================
+         * CAMERA POSITION
+         * =================================================
+ */
+
+        const position =
+            new this.THREE.Vector3(
+                center.x -
+                    forward.x *
+                    safeDistance,
+
+                center.y -
+                    forward.y *
+                    safeDistance,
+
+                center.z -
+                    forward.z *
+                    safeDistance
+            );
+
+
+        /*
+         * =================================================
+         * CONTROLLER
+         * =================================================
+ */
+
+        controller.setPosition(
+            position.x,
+            position.y,
+            position.z
+        );
+
+
+        controller.lookAtPoint(
+            center.x,
+            center.y,
+            center.z
+        );
+
+
+        console.log(
+            "[Universe] CAMERA INITIALIZED:",
+            {
+                center,
+                radius,
+                configuredDistance,
+                distance:
+                    safeDistance
+            }
+        );
+
+
+        return true;
+    }
+
+
+    /*
+     * =====================================================
+     * PARTICLE RADIUS
+     * =====================================================
+ */
+
+    getParticleRadius() {
+
+        const points =
+            this.particleSystem?.points;
+
+        const geometry =
+            points?.geometry;
+
+
+        if (
+            !geometry
+        ) {
+
+            return 10;
+        }
+
+
+        try {
+
+            geometry.computeBoundingSphere?.();
+
+
+            const sphere =
+                geometry.boundingSphere;
+
+
+            if (
+                sphere &&
+                Number.isFinite(
+                    sphere.radius
+                ) &&
+                sphere.radius > 0
+            ) {
+
+                return Math.max(
+                    sphere.radius,
+                    1
+                );
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "[Universe] BOUNDS ERROR:",
+                error
+            );
+        }
+
+
+        return 10;
+    }
+
+
+    /*
+     * =====================================================
+     * CAMERA VISIBILITY VALIDATION
+     * =====================================================
+ */
+
+    validateCameraVisibility() {
+
+        const camera =
+            this.getThreeCamera();
+
+        const points =
+            this.particleSystem?.points;
+
+
+        if (
+            !camera
+        ) {
+
+            console.error(
+                "[Universe] CAMERA VISIBILITY FAILED: NO CAMERA"
+            );
+
+            return false;
+        }
+
+
+        if (
+            !points
+        ) {
+
+            console.error(
+                "[Universe] CAMERA VISIBILITY FAILED: NO POINTS"
+            );
+
+            return false;
         }
 
 
         console.log(
-            "[Universe] INITIAL CAMERA DISTANCE:",
-            distance
+            "[Universe] CAMERA STATE:",
+            {
+                position: {
+                    x:
+                        camera.position.x,
+
+                    y:
+                        camera.position.y,
+
+                    z:
+                        camera.position.z
+                },
+
+                rotation: {
+                    x:
+                        camera.rotation.x,
+
+                    y:
+                        camera.rotation.y,
+
+                    z:
+                        camera.rotation.z
+                },
+
+                visible:
+                    points.visible,
+
+                radius:
+                    this.getParticleRadius()
+            }
         );
+
+
+        return true;
     }
 
 
@@ -1083,7 +1499,7 @@ export class Universe {
      * =====================================================
      * ATTACH OBSERVER
      * =====================================================
-     */
+ */
 
     attachObserver(
         nebula
@@ -1099,10 +1515,6 @@ export class Universe {
 
 
         try {
-
-            /*
-             * Preferred API.
-             */
 
             if (
                 typeof this.observer.attach ===
@@ -1128,10 +1540,6 @@ export class Universe {
                 }
             }
 
-
-            /*
-             * Current compatibility path.
-             */
 
             if (
                 this.observer.detector &&
@@ -1177,7 +1585,7 @@ export class Universe {
      * =====================================================
      * UPDATE
      * =====================================================
-     */
+ */
 
     update(
         time,
@@ -1188,7 +1596,7 @@ export class Universe {
          * =================================================
          * BACKGROUND
          * =================================================
-         */
+ */
 
         if (
             this.stars
@@ -1212,9 +1620,9 @@ export class Universe {
 
         /*
          * =================================================
-         * PARTICLE SYSTEM
+         * PARTICLES
          * =================================================
-         */
+ */
 
         if (
             this.particleSystem
@@ -1241,7 +1649,7 @@ export class Universe {
          * =================================================
          * NO NEBULA
          * =================================================
-         */
+ */
 
         if (
             !this.nebula ||
@@ -1254,9 +1662,9 @@ export class Universe {
 
         /*
          * =================================================
-         * STABLE NEBULA MOTION
+         * STABLE MOTION
          * =================================================
-         */
+ */
 
         if (
             this.nebula.state ===
@@ -1326,17 +1734,7 @@ export class Universe {
          * =================================================
          * OBSERVER
          * =================================================
-         *
-         * Observer owns:
-         *
-         * - Similarity
-         * - HOLD
-         * - Timeout
-         * - Observation completion
-         *
-         * Universe only consumes the result.
-         * =================================================
-         */
+ */
 
         if (
             this.observer &&
@@ -1364,12 +1762,6 @@ export class Universe {
                         );
 
 
-                    /*
-                     * -----------------------------------------
-                     * OBSERVATION COMPLETE
-                     * -----------------------------------------
-                     */
-
                     if (
                         result &&
                         result.completed ===
@@ -1383,10 +1775,6 @@ export class Universe {
                         );
 
 
-                        /*
-                         * Immediately start event.
-                         */
-
                         this.completeObservation()
                             .catch(
                                 error => {
@@ -1395,7 +1783,6 @@ export class Universe {
                                         "[Universe] COMPLETE OBSERVATION ERROR:",
                                         error
                                     );
-
                                 }
                             );
                     }
@@ -1416,7 +1803,7 @@ export class Universe {
      * =====================================================
      * SHUFFLE
      * =====================================================
-     */
+ */
 
     async shuffle() {
 
@@ -1429,10 +1816,6 @@ export class Universe {
             return false;
         }
 
-
-        /*
-         * Never shuffle during observation/event.
-         */
 
         if (
             STATE.observationEvent ||
@@ -1467,10 +1850,6 @@ export class Universe {
                     .SHUFFLE_TIME
             );
 
-
-            /*
-             * Make sure current Nebula still exists.
-             */
 
             if (
                 this.nebula
@@ -1529,15 +1908,9 @@ export class Universe {
      * =====================================================
      * COMPLETE OBSERVATION
      * =====================================================
-     */
+ */
 
     async completeObservation() {
-
-        /*
-         * =================================================
-         * VALIDATION
-         * =================================================
-         */
 
         if (
             !this.particleSystem ||
@@ -1553,12 +1926,6 @@ export class Universe {
         }
 
 
-        /*
-         * =================================================
-         * DUPLICATE PROTECTION
-         * =================================================
-         */
-
         if (
             this.observationEventRunning
         ) {
@@ -1566,12 +1933,6 @@ export class Universe {
             return false;
         }
 
-
-        /*
-         * =================================================
-         * LOCK EVENT
-         * =================================================
-         */
 
         this.observationEventRunning =
             true;
@@ -1599,21 +1960,9 @@ export class Universe {
 
         try {
 
-            /*
-             * ---------------------------------------------
-             * Nebula state
-             * ---------------------------------------------
-             */
-
             this.nebula.state =
                 "OBSERVATION_EVENT";
 
-
-            /*
-             * ---------------------------------------------
-             * Pause Observer
-             * ---------------------------------------------
-             */
 
             if (
                 this.observer &&
@@ -1635,24 +1984,16 @@ export class Universe {
             }
 
 
-            /*
-             * ---------------------------------------------
-             * Stop summon timer if still alive.
-             * ---------------------------------------------
-             */
-
             this.clearSummonTimer();
 
 
             /*
-             * ---------------------------------------------
-             * Execute Event
-             * ---------------------------------------------
+             * ObservationEvent receives
+             * the REAL THREE.Camera.
              */
 
             await runObservationEvent(
-                this.camera?.camera ||
-                this.camera,
+                this.getThreeCamera(),
                 this.particleSystem
             );
 
@@ -1661,12 +2002,6 @@ export class Universe {
                 "[Universe] OBSERVATION EVENT FINISHED"
             );
 
-
-            /*
-             * ---------------------------------------------
-             * Restore Nebula
-             * ---------------------------------------------
-             */
 
             if (
                 this.nebula
@@ -1710,12 +2045,6 @@ export class Universe {
 
         } finally {
 
-            /*
-             * =================================================
-             * RELEASE EVENT LOCK
-             * =================================================
-             */
-
             this.observationEventRunning =
                 false;
 
@@ -1729,12 +2058,6 @@ export class Universe {
             STATE.controlsLocked =
                 false;
 
-
-            /*
-             * =================================================
-             * RESET OBSERVER
-             * =================================================
-             */
 
             if (
                 this.observer &&
@@ -1756,12 +2079,6 @@ export class Universe {
             }
 
 
-            /*
-             * =================================================
-             * REATTACH CURRENT NEBULA
-             * =================================================
-             */
-
             if (
                 this.nebula
             ) {
@@ -1771,12 +2088,6 @@ export class Universe {
                 );
             }
 
-
-            /*
-             * =================================================
-             * RESET OBSERVATION STATE
-             * =================================================
-             */
 
             STATE.observationComplete =
                 false;
@@ -1799,7 +2110,7 @@ export class Universe {
      * =====================================================
      * GET OBSERVATION STATE
      * =====================================================
-     */
+ */
 
     getObservationState() {
 
@@ -1843,9 +2154,9 @@ export class Universe {
 
     /*
      * =====================================================
-     * DISPOSE PARTICLE SYSTEM
+     * DISPOSE
      * =====================================================
-     */
+ */
 
     disposeParticleSystem() {
 
@@ -1915,9 +2226,9 @@ export class Universe {
 
     /*
      * =====================================================
-     * CLEAR SUMMON TIMER
+     * CLEAR TIMER
      * =====================================================
-     */
+ */
 
     clearSummonTimer() {
 
@@ -1940,7 +2251,7 @@ export class Universe {
      * =====================================================
      * VECTOR
      * =====================================================
-     */
+ */
 
     normalizeVector3(
         value
@@ -1988,7 +2299,7 @@ export class Universe {
      * =====================================================
      * ERROR
      * =====================================================
-     */
+ */
 
     showError(
         error
@@ -2039,50 +2350,38 @@ export class Universe {
             box.style.position =
                 "fixed";
 
-
             box.style.left =
                 "10px";
-
 
             box.style.right =
                 "10px";
 
-
             box.style.bottom =
                 "10px";
-
 
             box.style.zIndex =
                 "999999";
 
-
             box.style.padding =
                 "14px";
-
 
             box.style.background =
                 "rgba(120,0,0,0.92)";
 
-
             box.style.color =
                 "#ffffff";
-
 
             box.style.fontFamily =
                 "monospace";
 
-
             box.style.fontSize =
                 "13px";
-
 
             box.style.lineHeight =
                 "1.5";
 
-
             box.style.whiteSpace =
                 "pre-wrap";
-
 
             box.style.pointerEvents =
                 "none";

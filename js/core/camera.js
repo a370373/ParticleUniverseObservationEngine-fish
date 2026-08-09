@@ -1,29 +1,15 @@
 import { CONFIG } from "../config.js";
 
-
 export class CameraController {
 
     constructor(THREE) {
 
-        this.THREE =
-            THREE;
-
+        this.THREE = THREE;
 
         /*
-         * =================================================
-         * CAMERA POSITION
-         * =================================================
-         *
-         * CameraController 是 Camera position
-         * 的唯一狀態來源。
-         *
-         * 不要讓其他模組只修改：
-         *
-         * this.camera.position
-         *
-         * 如果需要修改鏡頭位置，
-         * 請使用 setPosition()。
-         * =================================================
+         * =====================================================
+         * CAMERA STATE
+         * =====================================================
          */
 
         this.position =
@@ -33,56 +19,28 @@ export class CameraController {
                 35
             );
 
+        this.yaw = 0;
 
-        /*
-         * =================================================
-         * ROTATION
-         * =================================================
-         */
-
-        this.yaw =
-            0;
-
-        this.pitch =
-            0;
-
-
-        /*
-         * =================================================
-         * MOVEMENT
-         * =================================================
-         */
+        this.pitch = 0;
 
         this.velocity =
             new THREE.Vector3();
 
-
         this.keys =
             new Set();
 
-
-        this.zoomVelocity =
-            0;
-
-
-        /*
-         * =================================================
-         * FRICTION
-         * =================================================
-         */
+        this.zoomVelocity = 0;
 
         this.friction =
             CONFIG.CAMERA.FRICTION;
 
-
         /*
-         * =================================================
-         * INITIALIZATION STATE
-         * =================================================
+         * TRUE THREE CAMERA
+         *
+         * CameraController is the single owner.
          */
 
-        this.__created =
-            false;
+        this.camera = null;
     }
 
 
@@ -96,176 +54,26 @@ export class CameraController {
 
         this.camera =
             new this.THREE.PerspectiveCamera(
-
                 CONFIG.CAMERA.FOV,
-
-                window.innerWidth /
-                window.innerHeight,
-
+                Math.max(
+                    1,
+                    window.innerWidth
+                ) /
+                Math.max(
+                    1,
+                    window.innerHeight
+                ),
                 0.001,
-
-                Infinity
-
+                1000000
             );
-
-
-        /*
-         * =================================================
-         * INITIAL POSITION
-         * =================================================
-         */
 
         this.camera.position.copy(
             this.position
         );
 
-
-        /*
-         * =================================================
-         * INITIAL LOOK
-         * =================================================
-         *
-         * yaw = 0
-         * pitch = 0
-         *
-         * => looking toward -Z
-         * =================================================
-         */
-
-        const look =
-            this.getForward();
-
-
-        const target =
-            this.position.clone()
-                .add(look);
-
-
-        this.camera.lookAt(
-            target
-        );
-
-
-        this.__created =
-            true;
-
+        this.updateLookDirection();
 
         return this.camera;
-    }
-
-
-    /*
-     * =====================================================
-     * SET POSITION
-     * =====================================================
-     *
-     * IMPORTANT:
-     *
-     * This is the correct way for Universe / other
-     * systems to reposition the camera.
-     *
-     * It updates BOTH:
-     *
-     * 1. CameraController.position
-     * 2. THREE.Camera.position
-     *
-     * Therefore the next update() will NOT overwrite it.
-     * =====================================================
-     */
-
-    setPosition(
-        x,
-        y,
-        z
-    ) {
-
-        this.position.set(
-            Number(x) || 0,
-            Number(y) || 0,
-            Number(z) || 0
-        );
-
-
-        if (
-            this.camera
-        ) {
-
-            this.camera.position.copy(
-                this.position
-            );
-
-
-            this.updateLookAt();
-        }
-    }
-
-
-    /*
-     * =====================================================
-     * SET VECTOR POSITION
-     * =====================================================
-     */
-
-    setPositionVector(
-        vector
-    ) {
-
-        if (
-            !vector
-        ) {
-
-            return;
-        }
-
-
-        this.setPosition(
-            vector.x,
-            vector.y,
-            vector.z
-        );
-    }
-
-
-    /*
-     * =====================================================
-     * GET POSITION
-     * =====================================================
-     */
-
-    getPosition() {
-
-        return this.position.clone();
-    }
-
-
-    /*
-     * =====================================================
-     * UPDATE LOOK AT
-     * =====================================================
-     */
-
-    updateLookAt() {
-
-        if (
-            !this.camera
-        ) {
-
-            return;
-        }
-
-
-        const look =
-            this.getForward();
-
-
-        const target =
-            this.position.clone()
-                .add(look);
-
-
-        this.camera.lookAt(
-            target
-        );
     }
 
 
@@ -277,18 +85,24 @@ export class CameraController {
 
     resize() {
 
-        if (
-            !this.camera
-        ) {
-
+        if (!this.camera) {
             return;
         }
 
+        const width =
+            Math.max(
+                1,
+                window.innerWidth
+            );
+
+        const height =
+            Math.max(
+                1,
+                window.innerHeight
+            );
 
         this.camera.aspect =
-            window.innerWidth /
-            window.innerHeight;
-
+            width / height;
 
         this.camera.updateProjectionMatrix();
     }
@@ -305,52 +119,42 @@ export class CameraController {
         dy
     ) {
 
+        if (
+            !Number.isFinite(dx) ||
+            !Number.isFinite(dy)
+        ) {
+            return;
+        }
+
         this.yaw -=
             dx *
             CONFIG.CAMERA.ROTATION_SPEED;
-
 
         this.pitch -=
             dy *
             CONFIG.CAMERA.ROTATION_SPEED;
 
-
-        /*
-         * =================================================
-         * PITCH LIMIT
-         * =================================================
-         *
-         * Prevents the camera from reaching exactly
-         * straight up / straight down.
-         *
-         * Horizontal yaw remains unlimited.
-         * =================================================
-         */
-
         this.pitch =
             Math.max(
-
                 -Math.PI * 0.4999,
-
                 Math.min(
                     Math.PI * 0.4999,
                     this.pitch
                 )
-
             );
 
-
-        /*
-         * Update immediately.
-         */
-
-        this.updateLookAt();
+        this.updateLookDirection();
     }
 
 
     /*
      * =====================================================
      * ZOOM
+     *
+     * Zoom follows the camera's current forward vector.
+     *
+     * Positive amount:
+     * move forward/backward according to the caller.
      * =====================================================
      */
 
@@ -358,33 +162,199 @@ export class CameraController {
         amount
     ) {
 
+        if (
+            !Number.isFinite(amount)
+        ) {
+            return;
+        }
+
+        const forward =
+            this.getForward();
+
         /*
-         * =================================================
-         * IMPORTANT
-         * =================================================
-         *
-         * Zoom modifies the controller's position,
-         * not just THREE.Camera.position.
-         *
-         * Therefore the next update() will preserve it.
-         * =================================================
+         * Move along camera direction.
          */
 
-        this.position.z +=
-            amount;
+        this.position.addScaledVector(
+            forward,
+            -amount
+        );
 
+        this.validatePosition();
+
+        this.syncCameraPosition();
+    }
+
+
+    /*
+     * =====================================================
+     * SET POSITION
+     *
+     * Universe should use this instead of directly
+     * modifying camera.position.
+     * =====================================================
+     */
+
+    setPosition(
+        x,
+        y,
+        z
+    ) {
 
         if (
-            this.camera
+            Number.isFinite(x) &&
+            Number.isFinite(y) &&
+            Number.isFinite(z)
         ) {
 
-            this.camera.position.copy(
-                this.position
+            this.position.set(
+                x,
+                y,
+                z
+            );
+        }
+
+        this.validatePosition();
+
+        this.syncCameraPosition();
+    }
+
+
+    /*
+     * =====================================================
+     * LOOK AT POINT
+     * =====================================================
+     */
+
+    lookAtPoint(
+        x,
+        y,
+        z
+    ) {
+
+        if (
+            !this.camera
+        ) {
+            return;
+        }
+
+        const target =
+            new this.THREE.Vector3(
+                Number.isFinite(Number(x))
+                    ? Number(x)
+                    : 0,
+
+                Number.isFinite(Number(y))
+                    ? Number(y)
+                    : 0,
+
+                Number.isFinite(Number(z))
+                    ? Number(z)
+                    : 0
             );
 
+        const direction =
+            target
+                .clone()
+                .sub(this.position);
 
-            this.updateLookAt();
+        if (
+            direction.lengthSq() <
+            0.000001
+        ) {
+
+            return;
         }
+
+        direction.normalize();
+
+        /*
+         * Coordinate convention:
+         *
+         * forward =
+         *
+         * (
+         *     sin(yaw),
+         *     sin(pitch),
+         *    -cos(yaw)
+         * )
+         */
+
+        this.yaw =
+            Math.atan2(
+                direction.x,
+                -direction.z
+            );
+
+        this.pitch =
+            Math.asin(
+                Math.max(
+                    -1,
+                    Math.min(
+                        1,
+                        direction.y
+                    )
+                )
+            );
+
+        this.pitch =
+            Math.max(
+                -Math.PI * 0.4999,
+                Math.min(
+                    Math.PI * 0.4999,
+                    this.pitch
+                )
+            );
+
+        this.updateLookDirection();
+    }
+
+
+    /*
+     * =====================================================
+     * SYNC CAMERA POSITION
+     * =====================================================
+     */
+
+    syncCameraPosition() {
+
+        if (
+            !this.camera
+        ) {
+            return;
+        }
+
+        this.camera.position.copy(
+            this.position
+        );
+    }
+
+
+    /*
+     * =====================================================
+     * UPDATE LOOK DIRECTION
+     * =====================================================
+     */
+
+    updateLookDirection() {
+
+        if (
+            !this.camera
+        ) {
+            return;
+        }
+
+        const forward =
+            this.getForward();
+
+        const target =
+            this.position
+                .clone()
+                .add(forward);
+
+        this.camera.lookAt(
+            target
+        );
     }
 
 
@@ -401,23 +371,33 @@ export class CameraController {
         if (
             !this.camera
         ) {
-
             return;
+        }
+
+        if (
+            !Number.isFinite(dt) ||
+            dt <= 0
+        ) {
+
+            dt =
+                1 / 60;
         }
 
 
         /*
          * =================================================
-         * MOVEMENT DIRECTION
+         * INPUT
          * =================================================
          */
 
-        const direction =
+        const localDirection =
             new this.THREE.Vector3();
 
 
         /*
-         * FORWARD
+         * W / UP
+         *
+         * Forward
          */
 
         if (
@@ -425,12 +405,14 @@ export class CameraController {
             this.keys.has("arrowup")
         ) {
 
-            direction.z -= 1;
+            localDirection.z -= 1;
         }
 
 
         /*
-         * BACKWARD
+         * S / DOWN
+         *
+         * Backward
          */
 
         if (
@@ -438,12 +420,14 @@ export class CameraController {
             this.keys.has("arrowdown")
         ) {
 
-            direction.z += 1;
+            localDirection.z += 1;
         }
 
 
         /*
-         * LEFT
+         * A / LEFT
+         *
+         * Left
          */
 
         if (
@@ -451,12 +435,14 @@ export class CameraController {
             this.keys.has("arrowleft")
         ) {
 
-            direction.x -= 1;
+            localDirection.x -= 1;
         }
 
 
         /*
-         * RIGHT
+         * D / RIGHT
+         *
+         * Right
          */
 
         if (
@@ -464,34 +450,79 @@ export class CameraController {
             this.keys.has("arrowright")
         ) {
 
-            direction.x += 1;
+            localDirection.x += 1;
         }
 
 
         /*
          * =================================================
-         * APPLY MOVEMENT
+         * CONVERT LOCAL MOVEMENT TO WORLD MOVEMENT
          * =================================================
          */
 
         if (
-            direction.lengthSq() >
+            localDirection.lengthSq() >
             0
         ) {
 
-            direction.normalize();
+            localDirection.normalize();
+
+            /*
+             * Horizontal forward vector.
+             */
+
+            const forward =
+                new this.THREE.Vector3(
+                    Math.sin(this.yaw),
+                    0,
+                    -Math.cos(this.yaw)
+                );
 
 
-            const speed =
-                CONFIG.CAMERA.MOVE_SPEED *
-                dt *
-                60;
+            /*
+             * Horizontal right vector.
+             */
+
+            const right =
+                new this.THREE.Vector3(
+                    Math.cos(this.yaw),
+                    0,
+                    Math.sin(this.yaw)
+                );
 
 
-            this.velocity.addScaledVector(
-                direction,
-                speed
-            );
+            const worldDirection =
+                new this.THREE.Vector3();
+
+            worldDirection
+                .addScaledVector(
+                    forward,
+                    -localDirection.z
+                );
+
+            worldDirection
+                .addScaledVector(
+                    right,
+                    localDirection.x
+                );
+
+            if (
+                worldDirection.lengthSq() >
+                0
+            ) {
+
+                worldDirection.normalize();
+
+                const speed =
+                    CONFIG.CAMERA.MOVE_SPEED *
+                    dt *
+                    60;
+
+                this.velocity.addScaledVector(
+                    worldDirection,
+                    speed
+                );
+            }
         }
 
 
@@ -502,12 +533,10 @@ export class CameraController {
          */
 
         this.velocity.multiplyScalar(
-
             Math.pow(
                 this.friction,
                 dt * 60
             )
-
         );
 
 
@@ -524,96 +553,108 @@ export class CameraController {
 
         /*
          * =================================================
-         * SYNC THREE CAMERA
+         * SAFETY
          * =================================================
          */
 
-        this.camera.position.copy(
-            this.position
-        );
+        this.validatePosition();
 
 
         /*
          * =================================================
-         * LOOK DIRECTION
+         * APPLY
          * =================================================
          */
 
-        this.updateLookAt();
+        this.syncCameraPosition();
+
+        this.updateLookDirection();
     }
 
 
     /*
      * =====================================================
-     * FORWARD VECTOR
+     * POSITION SAFETY
+     * =====================================================
+     */
+
+    validatePosition() {
+
+        if (
+            !Number.isFinite(
+                this.position.x
+            ) ||
+            !Number.isFinite(
+                this.position.y
+            ) ||
+            !Number.isFinite(
+                this.position.z
+            )
+        ) {
+
+            this.position.set(
+                0,
+                0,
+                35
+            );
+
+            this.velocity.set(
+                0,
+                0,
+                0
+            );
+
+            return;
+        }
+
+
+        if (
+            !Number.isFinite(
+                this.velocity.x
+            ) ||
+            !Number.isFinite(
+                this.velocity.y
+            ) ||
+            !Number.isFinite(
+                this.velocity.z
+            )
+        ) {
+
+            this.velocity.set(
+                0,
+                0,
+                0
+            );
+        }
+    }
+
+
+    /*
+     * =====================================================
+     * FORWARD
      * =====================================================
      */
 
     getForward() {
 
         return new this.THREE.Vector3(
-
-            Math.sin(
-                this.yaw
-            ),
-
-            Math.sin(
-                this.pitch
-            ),
-
-            -Math.cos(
-                this.yaw
-            )
-
+            Math.sin(this.yaw),
+            Math.sin(this.pitch),
+            -Math.cos(this.yaw)
         ).normalize();
     }
 
 
     /*
      * =====================================================
-     * DEBUG STATE
+     * GET CAMERA
+     *
+     * Useful for systems that need the REAL THREE.Camera.
      * =====================================================
      */
 
-    getDebugState() {
+    getCamera() {
 
-        return {
-
-            position: {
-
-                x:
-                    this.position.x,
-
-                y:
-                    this.position.y,
-
-                z:
-                    this.position.z
-
-            },
-
-            yaw:
-                this.yaw,
-
-            pitch:
-                this.pitch,
-
-            velocity: {
-
-                x:
-                    this.velocity.x,
-
-                y:
-                    this.velocity.y,
-
-                z:
-                    this.velocity.z
-
-            },
-
-            created:
-                this.__created
-
-        };
+        return this.camera;
     }
 }
